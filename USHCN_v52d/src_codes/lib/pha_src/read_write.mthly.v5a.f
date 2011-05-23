@@ -206,7 +206,11 @@ c          enddo
           read(argv,fmt='(i4)') ihyear
           itemp = ihyear
           if(ihyear .lt. 0) then
-            itemp = ihyear * -1
+c     -- CHANGES BY DANIEL ROTHENBERG <darothen@mit.edu> -- BEGIN
+c        -- need to put parentheses around the -1 else the compiler
+c        -- misinterpets what operation is wanted here
+            itemp = ihyear * (-1)
+c     -- CHANGES -- END
           else if(ihyear .eq. 0) then
             itemp = begyr  
           endif

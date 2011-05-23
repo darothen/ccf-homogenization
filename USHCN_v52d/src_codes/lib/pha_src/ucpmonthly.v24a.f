@@ -722,9 +722,13 @@ c        print *,' Opened: ',mmunit,' File: ', mattmeta
 
 c     ---------------------------------------------------------------------
 c     Open Candidate stations meta file to process
-      open(nnunit, name=netfile, err=200)
+c     -- CHANGES BY DANIEL ROTHENBERG <darothen@mit.edu> -- BEGIN
+c        -- gfortran compiler expects second named argument to be called
+c        -- 'file', not 'name'. 
+      open(nnunit, file=netfile, err=200)
       if(mattdata .ne. '') then
-        open(rnunit, name=mattdata, err = 210)  
+        open(rnunit, file=mattdata, err = 210)  
+c     -- CHANGES -- END
       endif  
       
       print *,'  Decisions on inhomogeneity of the Candidate are made'
@@ -1909,7 +1913,14 @@ c         changed begin loop from itarg+1 to itarg, 14 Aug 03
             if(ipair .eq. 0) goto 20
 c           convert chgpt model byte to integer and remove SLR codes
             mtype = iachar(nfound(itarg,it2pair,imo)) - 2
-            if(mtype .gt. 0) then
+c     -- CHANGES BY DANIEL ROTHENBERG <darothen@mit.edu> -- BEGIN
+c        -- make sure mtype doesn't break things. The above call to 
+c        -- iachar will retrive a '\' because the default 'nfound' value
+c        -- was set to czero = '\'. iachar('\0') yields 90, so mtype above
+c        -- could be set to 90, which will break the lookup in 'itypshow'
+c        -- below, whose third dimension is only size 6.
+            if(mtype .gt. 0 .and. mtype .ne. 90) then
+c     -- CHANGES -- END
               if(icdebug .ge. 3)
      *          print *,'mtype: ',itarg,it2pair,imo,it,mtype
               itfound = itfound + 1

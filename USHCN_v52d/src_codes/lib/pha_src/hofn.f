@@ -104,7 +104,11 @@ c       if == 0 set to begyr else make ABS(ihyear)
 c       Note: has already been checked to be >= begyr
       ifrstyr = ihyear
       if(ihyear .lt. 0) then
-        ifrstyr = ihyear * -1
+c     -- CHANGES BY DANIEL ROTHENBERG <darothen@mit.edu> -- BEGIN
+c        -- Need to put parentheses around -1, else the compiler misinterprets
+c        -- what is wanted here
+        ifrstyr = ihyear * (-1)
+c     -- CHANGES -- END
       else if(ihyear .eq. 0) then
         ifrstyr = begyr
       endif

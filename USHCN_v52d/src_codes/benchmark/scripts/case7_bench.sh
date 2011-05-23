@@ -11,8 +11,9 @@ then
   exit
 fi
 
+runid=$1.DBUG.MLY.21_21
 # runid=$1.DBUG.MLY.USHCN
-runid=$1.FAST.MLY.21_21
+# runid=$1.FAST.MLY.21_21
 
 inelem="avg"
 ielem=3
