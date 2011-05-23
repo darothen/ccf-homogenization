@@ -1,0 +1,224 @@
+Updated 03 Oct, 2007 cw
+Updated 15 May, 2008 cw
+
+Column      
+  1     SOURCE CODE
+                           0 - Original hand edited USHCN Station History
+                                 record from 1987 and updated 1994
+                           1 - Summary of the Day (not used)
+                           2 - Master Station History record as supplied by
+                                 Archive Branch on 26 Apr, 2003
+                                 NOTE: updated from the Master Station Index
+                                 query on 15 May, 2008
+
+ 3-8    STATE & STATION NUMBER
+                          [First two positions indicate the state
+                           code (see Appendix A); last four indicate
+                           the NCDC Cooperative station ID number]
+
+10-17   BEGIN DATE (mmddyyyy)
+                          Month (mm = 01-12, 99)
+                          Day   (dd = 01-31, 99)
+                          Year  (yyyy = 1738-1994, 9999)
+
+          NOTE:  Values are separated by blanks.  "99" or "9999" are used for 
+                   unknown component(s) of the date.
+
+19-26   END DATE (mmddyyyy)
+                          Month (mm = 01-12, 99)
+                          Day   (dd = 01-31, 99)
+                          Year  (yyyy = 1738-1994, 9999)
+
+          NOTE:  Values are separated by blanks.  "99" or "9999" are used for 
+                   unknown components of the date.  An end date of "99 99 9999" 
+                   indicates the station is still presently active. 
+
+28-36   LATITUDE (ddd mm ss)
+                         Degrees (ddd = -90 to 90)
+                         Minutes (mm = 00 to 59)
+                         Seconds (ss = 00 to 59)
+                         
+          NOTE:  Seconds are 00 until the mid-1990's at which time GPS was used
+                   to define the position more accurately.
+                         
+38-47   LONGITUDE (dddd mm ss)
+                         Degrees (ddd = -180 to 180)
+                         Minutes (mm = 00 to 59)
+                         Seconds (ss = 00 to 59)
+                         
+          NOTE:  Seconds are 00 until the mid-1990's at which time GPS was used
+                   to define the position more accurately.
+
+49-59   LAST DISTANCE-DIRECTION
+               
+          Distance-direction from last location.
+          
+          Source = 0 
+               In the original USHCN SHF
+                    Distance if(column 52 == " ") in tenths of miles
+                             if(column 52 == "B") in blocks
+                    Direction in cardinal compass points (N to WNW)
+                    
+                    999 999 is unknown
+                    000 000 is no change
+                    
+          Source = 2
+               In the Master Station History Records
+                    Distance in various formats and lengths, including
+                      MI or M - miles          
+                      FT - feet
+                      YD - yards
+                    Direction in cardinal points
+                      UN - unknown with XX or the best guess (from lat/lon)  
+
+61-65   ELEVATION
+          
+          Station elevation in feet
+
+68-71   INSTRUMENT ELEVATION (pptt)
+
+          Nearest whole feet
+              pp - Precipitation gauge
+              tt - Temperature sensor
+                
+                99 is unknown
+                RF is reference height (03 for Precip, 05 for Temp)
+
+73-76   OBSERVATION TIMES (OT)
+                     Precipitation OT
+                     Temperature OT
+
+               The observation times are encoded to the nearest whole hour where
+               known; in some instances, the observation may have been taken at a
+               variable hour (e.g., sunrise or sunset) or according to a rotating
+               seasonal schedule based upon agricultural needs.
+
+               Examples:
+               01-24,99  Nearest Whole Hour; "99" for unknown
+               SR        Sunrise
+               SS        Sunset
+               RS        Rotating Schedule (in general, evening observations were
+                         taken during the winter months [Oct/Nov thru Apr/May] and
+                         morning observations taken during summer months or
+                         "crop season".)
+
+                         In "RS" instances, often two observations were taken during
+                         the summer; usually between 5-7 AM and again between 5-7
+                         PM.  In such 2 obs/day instances, it's unclear whether both
+                         elements are read twice, but recorded for a single hour; or
+                         (a more likely practice), the precipitation is recorded in
+                         the morning and temperature in the evening.
+
+               At some sites (usually airports) a uniform schedule was in use, but
+               the particular hour at which a particular element was observed was
+               not specified.  In these instances, the number of hours per day for
+               which observations were taken is given.  (NOTE:  the number of hours
+               must not be confused with synoptic observing schedules such as
+               3-hourly, 6-hourly, etc. ones at which observations are taken at
+               intervals of every 3 hours, 6 hours, etc.)
+ 
+               xxHR      where xx indicates the number of hours for which the site
+                         took observations;
+
+               An early practice regarding the observation times of temperature
+               involved taking three readings (morning, afternoon, and evening or
+               "tri-daily").  These readings were usually made at 7 AM, 2 PM, and
+               9 PM.  A weighted average was computed in which the 9 PM observation
+               was summed twice and the total sum divided by 4 [e.g.,
+               (7 AM + 2 PM + 9 PM + 9 PM )/ 4  ].  Note, in these instances, no
+               precipitation observation time has been encoded.
+
+               TRID      indicates "tri-daily" temperature average
+
+
+               The early editions of the Weather Bureau's reporting forms allowed
+               space only for a single observing time to be entered.  Later on,
+               revised forms specifically identified whether the observation time
+               was for temperature or precipitation.  In the instances where the
+               forms were ambiguous with regard to the observing times of these
+               elements, the OT is encoded as follows:
+
+               9xx9      where xx indicates the hour as listed for the observations;
+                         whether it's accurate for both temperature and precipitation
+                         is unknown
+
+               Examples of OT codes:
+
+               SRSS      Precipitation reading made at sunrise; temperature read at
+                         sunset
+
+               SS99      Precipitation read at sunset; temperature read at an
+                         unknown hour or there is no temperature data available for
+                         that period of record
+
+               0718      Precipitation read at 0700 (i.e., 7 AM); temperature read
+                         at 1800 (i.e., 6 PM)
+
+               9079      Ambiguous form:  0700 was the only listed hour of
+                         observation; unknown whether for both temperature and
+                         precipitation
+
+               06HR      Station observed 6 hours/day; whether the average of these
+                         6 observations is what was recorded or only a single hour
+                         was used is unclear
+
+               RSSS      Precipitation readings made on a rotating schedule;
+                         temperatures read at sunset
+
+               TRID      "Tri-daily" readings of temperature; no OT encoded for
+                         precipitation
+
+               9918      Precipitation readings made at an unknown hour or there is
+                         no precipitation data available for that period of record;
+                         temperature read at 1800
+
+
+82-END
+
+         Instruments and additional station information are in space delimited 5
+         character fields. The first two fields are the primary instruments. 
+         Blank or UNKN is unknown
+  
+         Instrument                                 Mnemonic
+
+         Additional Instruments                       AI
+         Cotton Region Shelter (official)             CRS
+         Dry-Bulb Thermometer                         DT
+         Class 'A' Evaporation Station                EVA
+         Fischer-Porter Gage                          FP
+         Hygrothermograph                             HYTHG
+         Minimum Thermometer                          MN
+         Maximum Thermometer                          MX
+         Non-Recording River Gage                     NRIG
+         Non-Standard Rain Gage                       NSRG
+         Non-Standard Shelter                         NSS
+         Recording River Gage                         RRIG
+         Recording Rain Gage                          RRNG
+         Snow Density Gage                            SDE
+         Storage Gage                                 SG
+         Standard Rain Gage                           SRG
+         Standard Shelter (official)                  SS
+         Thermograph                                  TG
+         Digital Thermometer                          DGT
+         Tipping Bucket Gage                          TB
+         Other than Class 'A' Evaporation station     EVO
+         Maximum/Minimum Temperature System           MMTS
+         Telemetry System                             TELSY
+         Hygrothermometer (type unknown)              HYGRO
+         Hygrothermometer - H06x series               HY6
+         Hygrothermometer - H08x series               HY8
+         Shielded Fischer-Porter Gage                 SFP
+         Shielded Recording Rain Gage                 SRRNG
+         Shielded Storage Gage                        SSG
+         Shielded Standard Rain Gage                  SSRG
+         Shielded Tipping Bucket                      STB
+         Automated Meteorological Observing System    AMOS
+         Automated Observing Station                  AUTOB
+         Psychrometer (official, AK only)             PSY
+  
+         Instruments added since 1987:
+  
+         Automatic surface obs system(ASOS)           ASOS
+         Plastic 4" Rain Gauge                        PLAST
+         Storage Rain Gauge                           STO
+

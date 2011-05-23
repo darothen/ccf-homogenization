@@ -1,0 +1,49 @@
+c ----- parameters specific to the Maximum Likelyhood Ratio Test
+c   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+c   !!!!!! DEPENDS UPON THE inhomog.parm.incl PARAMETERS !!!!!!!
+c   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+c   WARNING: 14Jan2005 - nmo moved to inhomog.parm.system.mthly.incl
+c      parameter (nmo = numyr * 12)
+c			= total number of months including the 12
+c			  months of lead-in data that are not used
+c
+      parameter (neigh = nstns-1)
+c			= number of neighbors
+c
+        parameter (nMaxStns = nstns)
+c
+c
+        parameter (numSrt = 20)
+c
+c
+      parameter (nstart = 13)
+c			= first month of the nmo months
+c			  to be analyzed
+c
+      parameter (kmo = nmo)
+c			= number of months for analysis for each
+c			  station
+c
+      parameter (nmax = neigh*nmo)
+c		      = maximum total number of months in the neidat
+c			array and used in subroutine correl
+c
+      parameter (kmotot = kmo*neigh)
+c			  total number of months for analysis for
+c			  all neighbors combined
+c
+      parameter (nyears = numyr)
+c			= number of complete years in analysis
+c
+      parameter (neimon = 12*neigh)
+c			= total number of months in annual cycles
+c			  for all neighbors combined
+c
+      parameter (minmon = 1)
+c			= minimum number of months that can be
+c			  used in calculating the shift test
+c			  statistic - - - minmon must be greater than
+c			  or equal to 1
+      parameter (maxpeak = 200)
+c                       = maximum number of peaks found in statistic series

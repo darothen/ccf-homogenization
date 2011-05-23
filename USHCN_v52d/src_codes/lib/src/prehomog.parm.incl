@@ -1,0 +1,41 @@
+C       This is a resource file containing parameter settings for the 
+c         following processing routines in the USHCNv2 project 
+c
+c         ushcn_dist
+c         ushcn_corr
+c         ushcn_tobs
+
+c       Begin year for all series (1874)
+        integer ibegyr
+        parameter (ibegyr = 1874)
+
+c       End year for the USHCN series
+        integer ilstyr
+        parameter (ilstyr = 2010)
+        
+c       Number of stations in the nearest neighbor (dist) file
+        parameter (ndist = 40)
+
+c       Number of network stations (including candidate!)
+c       NOTE: This variable must be coordinated with its counterpart in
+c               the inhomog.parm.incl file
+        integer nstns
+c       FOR USHCN RUN
+        parameter (nstns = 40)
+c       FOR GHCN RUN !!!!!
+c        parameter (nstns = 100)
+
+c       Missing data definition
+        real amiss
+        parameter (amiss = -99.99)
+
+c       Total Number of years
+        parameter (numyr = ilstyr - ibegyr + 1)
+        
+c     number of elements defined
+      parameter (maxelem = 6)
+
+c     celem refers to the cdtype and otype in perhomog.comm.incl
+c        - must be defined as in the normals file names
+      character*4 celem(maxelem)/'_max','_min','_avg','_pcp','_pw0',
+     *  '_pw1' /

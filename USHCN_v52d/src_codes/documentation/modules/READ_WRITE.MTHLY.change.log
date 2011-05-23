@@ -1,0 +1,39 @@
+ ------------------------- Module READ_WRITE.MTHLY --------------------------
+ 
+c     version  date     description
+c     ------- -------   -------------------------------------------
+c
+c    --------------------------- Official Version USHCNv2 ----------------------
+c
+c        5a   28may09   restucture for new data type subdir from state
+c
+c        5    21mar08   cleaned up the command line parameter routine
+c                       (commline) and added H for HOFN graph output
+c
+c        4b   18may07   migrated removal of IMD(qc) bad data flag ('f')
+c                         from an obscure AWK script to here. This flag
+c                         should have been taken care of earlier, especially
+c                         if the data was run through the distance/correlation
+c                         algorithm where generation of sub-networks and 
+c                         removal of stations without sufficient data is
+c                         accomplished.
+c
+c        4a   08jan07   all missing data with UCP "removed flag" are output   
+c
+c    ------------------------ Internal Beta Version USHCNv2 --------------------
+c    ---------------------------------- 21 Dec 2006 ----------------------------
+c
+c        4    05dec06   added minslpknt to command line parms
+c        3i   29nov06   added nindx for additional paired station loop backs
+c        3h   03nov06   add MMTS (from USHCN v1) option, fixed input element
+c                         error
+c        3g   20oct06   added optional region input so perimeter stations
+c                         are not output
+c        3f   15may06   added ndelete array to the output ("RSTRTv7")
+c        3e   17apr06   brought neglected annual timeres back to operational 
+c        3d   05apr06   reinstated Techinque ON/OFF option for itech
+c        3c   08nov05   added confidence interval output
+c        3b   11oct05   fix 3 & 3a for re-entry 2 ("RSTRTv6")
+c        3    22sep05   Mod for restart journal version "RSTRTv5"
+c        2    26jul05   iconfirm = 2
+c        2a   30jun05   iconfirm = 3
