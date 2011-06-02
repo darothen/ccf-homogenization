@@ -8,11 +8,11 @@ def read_comp(station_id, src):
     '''
     
     if src == "hom":
-        fn = "../src_codes/benchmark/monthly/WMs.52d/%s_avg.WMs.52d" % station_id
+        fn = "src_codes/benchmark/monthly/WMs.52d/%s_avg.WMs.52d" % station_id
         year_bit = 0
         month_indices = range(1, 13)
     elif src == "raw":
-        fn = "../src_codes/benchmark/monthly/raw/%s_avg.raw" % station_id
+        fn = "src_codes/benchmark/monthly/raw/%s_avg.raw" % station_id
         year_bit = 1
         month_indices = range(2,14)
 

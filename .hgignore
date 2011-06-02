@@ -1,0 +1,19 @@
+# use glob syntax
+syntax: glob
+
+# compiled files
+*.for
+*.pyc 
+bin/*
+
+# editor files
+*~
+.project
+.pydevproject
+
+# outputfiles
+*.log
+*.52d
+*.compress
+
+# other
