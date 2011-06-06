@@ -18,7 +18,7 @@ def main():
                       default="UCPM24aM21fC6bL1Si6cR5aH1")
     parser.add_option("-m", "--mode", dest="mode",
                       action="store", type="string",
-                      default="DBUG")
+                      default="FAST")
     parser.add_option("-c", "--case", dest="case",
                       action="store", type="string",
                       default="21_21")
@@ -66,6 +66,8 @@ def main():
     print "--------------------------------"
     subprocess.call(["./src_codes/benchmark/scripts/case7_bench.sh",
                      UCP,
+                     MODE,
+                     CASE,
                      USHCNBASE])
     print "--------------------------------"
     

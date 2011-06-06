@@ -4,14 +4,22 @@
 reqparm=`expr 1`
 
 if [ $# -lt $reqparm ]
+
+## Modified by Daniel Rothenberg <darothen@mit.edu>
+##    -- added second/third command line arguments so that the 
+##       automated Python script can hand off the full run configuration.
+##    -- next step will be to remove this script and incorporate it
+##       entirely into the Python driver.
 then
   echo "Not all command line input defined. Please enter"
   echo '  $1 is the current UCP routine (i.e. UCPM24pM21qC6pL1Si6pR5p.lf95)'
   echo '     FAST.MLY.21_21 version - FOR USE WITH BENCHMARK CASE ONLY'
+  echo '  $2 is either DBUG/FAST'
+  echo '  $3 is the case - USHCN or 21_21'
   exit
 fi
 
-runid=$1.DBUG.MLY.21_21
+runid=$1.$2.MLY.$3
 # runid=$1.DBUG.MLY.USHCN
 # runid=$1.FAST.MLY.21_21
 
