@@ -4,6 +4,25 @@ Daily status report - June 6
 - Weekly status meeting (on Skype)
 - Met with Nick (on IRC) to discuss API structure/logic 
 	- model after standard 'codecs' library
+		- use object-oriented ideas to organize package structure as well
+			as API real-use workflow.
 	- developed Mercurial branching strategy and workflow (see attached PDF)
+- Re-did directory structure (rev default/9f233e02a4fa)
+(commit default/9f233e02a4fa)
 
+- Continued reading through code, with an emphasis on read_write_monthly.v5a.f and
+	its "readnet" subroutine. This is the method which reads USHCN data files and
+	converts them into the format that the MW2009 algorithm needs. There are a few
+	considerations which will need to be made - which I began doing in the next
+	bullet point - about how to re-do this IO functionality for the Python program.
 	
+	As Nick mentioned when we discussed API structure/logic, object-oriented works
+	well here, and I am reading through the IO portions of ccc-gistemp to get a
+	better idea of what techniques might work well.
+- In conjunction with that last point, I started reading through ccc-gistemp to
+	see what sorts of techniques have previously been used for storing, reading,
+	and manipulating data similar to what I am working with.
+- Began creating ushcn_data.py classes, modeled after ccc-gistemp/code/giss_data.py
+	- Station: a station's metadata
+	- Series: an object which will hold a station's actual data and meta-dat about it
+		and the Station which generated it.

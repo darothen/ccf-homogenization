@@ -1,3 +1,0 @@
-c     parameters inherent to filnet_subs
-      PARAMETER (inmstn = 40, minsta = 3, minyr = 5,
-     *  numrat=400, inumyr = nyr)

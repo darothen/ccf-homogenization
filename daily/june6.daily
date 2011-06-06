@@ -1,4 +1,0 @@
-Daily status report - June 6
-
-- Discovered that case7_bench.sh overrode drive_benchmark.py's choice of MODE and CASE; added command line args to case7_bench.sh to allow drive_benchmark.py's choices
-- Weekly status meeting

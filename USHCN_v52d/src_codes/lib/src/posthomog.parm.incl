@@ -1,4 +1,0 @@
-c     parameters from calling routine
-      parameter (nmth = 12, numref = 2400,
-     *  amiss = -99.99, ibyear=1874, ieyear=2010)
-      parameter (nyr=ieyear-ibyear+1)
