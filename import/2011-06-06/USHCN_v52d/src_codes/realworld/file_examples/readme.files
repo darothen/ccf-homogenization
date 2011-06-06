@@ -1,0 +1,5 @@
+# Examples of input files for the Real World
+011084.his - History file for the HCN station: 011084 BREWTON 3 SSE
+011084_max.raw - Raw monthly maximum temperature QC'd data for BREWTON 3 SSE
+011084.meta - Metadata example of BREWTON 3 SSE 
+

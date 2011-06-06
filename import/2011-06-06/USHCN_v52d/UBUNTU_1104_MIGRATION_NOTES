@@ -1,0 +1,7 @@
+June 2, 2011:
+	Cloned HG repository to new Ubuntu 11.04 build. The following dependencies
+	needed to be installed:
+		- gawk
+		- gfortran
+		- csh 
+	After that, program ran just fine.

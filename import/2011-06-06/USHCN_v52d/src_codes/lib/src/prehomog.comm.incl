@@ -1,0 +1,20 @@
+c     command line variables
+
+c     files and directories
+      character*132 metafile, outfile, distfile, corrfile,
+     *   canddir, netdir, outdir
+
+c     Process Stage for input and output
+      character*8 cdtype, otype
+      
+c     last year to process
+      integer endyr
+
+c     met element (see celem in prehomog.parm.incl for definitions)
+      integer inel
+
+c     the number of candidates in the metafile before the coop stations
+      integer nc
+      
+      common /commblk/ endyr, inel, nc, cdtype, otype, distfile, 
+     *   corrfile, metafile, outfile, canddir, netdir, outdir
