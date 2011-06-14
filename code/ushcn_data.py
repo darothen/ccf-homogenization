@@ -12,7 +12,8 @@ variables.
 
 The 'Series' class here is the primary tool for holding raw data for any
 of the USHCN variables. Any 'Series' object must reference a 'Station' object,
-which contains meta-data about the Station from where the raw data comes.
+which contains meta-data ab
+out the Station from where the raw data comes.
 
 In the future, an additional class will be added to contain collections of
 'Series' data objects.
@@ -20,6 +21,15 @@ In the future, an additional class will be added to contain collections of
 """
 __docformat__ = "restructuredtext"
 
+#: The element codes identifying what variable is contained in a USHCN dataset,
+#: and the scaling factor to convert the recorded values to observations.
+ELEM_CODES = { 1: { 'type': 'max', 'scale': 0.1 },
+               2: { 'type': 'min', 'scale': 0.1 },
+               3: { 'type': 'avg', 'scale': 0.1 },
+               4: { 'type': 'pcp', 'scale': 0.01 } }
+
+#: Possible types of USHCN data.
+ELEM_TYPES = [data['type'] for data in ELEM_CODES.values()]
 
 #: The value used in the USHCN datasets to indicate a missing data value
 MISSING = -9999
@@ -41,7 +51,7 @@ class Station(object):
         self.__dict__.update(values)
         
     def __repr__(self): 
-        return "Station(%r)" % self.__dict__
+        return "%s (coop_id=%6s)" % (self.name, self.coop_id)
     
     def update_values(self, **values):
         self.__dict__.update(values)
@@ -94,35 +104,45 @@ class Series(object):
         An integer in (-12, 12) giving the time difference between Coordinated
         Universal Time (UTC) and the local standard time at the station
         generating this data.
-    
+                
     """
     def __init__(self, **k):
-        first_year = None
-        if 'first_year' in k:
-            first_year = k['first_year']
-            del k['first_year']
-            self._first_year = first_year
-
-        series = None
-        if 'series' in k:
-            series = k['series']
-            del k['series']
-            self.set_series(series, first_year)
         
         MISSING_VAL = MISSING
         variable = None
+        variable_str = None
         if 'variable' in k:
             variable = k['variable']
-            if variable in (1, 2, 3):
-                MISSING_VAL = MISSING*0.1
-            if variable in (4, ):
-                MISSING_VAL = MISSING*0.01
+            
+            variable_info = ELEM_CODES[variable]
+            MISSING_VAL = MISSING
+            variable_str = variable_info['type']            
+                
             del k['variable']
+            
             self.MISSING_VAL = MISSING_VAL
             self._variable = variable
+            self._variable_str = variable_str
+
+        series = None
+        years = None
+        if 'series' in k:
+            if not 'years' in k:
+                raise MissingDataError("years")
+            series = k['series']
+            years = k['years']
             
-        self.__dict__.update(k)
-        
+            ## We have data, but there's probably missing years in there. We
+            ## need to go ahead and fill in missing data so that we have 
+            ## semi-continuous data (or at least, continuous placeholders for
+            ## data) running from years[0] to years[-1].
+            series, years = self._fill_missing(series, years, self.MISSING_VAL)
+            
+            del k['series']
+            del k['years']
+            self.set_series(series, years)
+                    
+        self.__dict__.update(k)        
             
     def __repr__(self):
         # Assume that this series is associated with a station and knows that
@@ -130,7 +150,13 @@ class Series(object):
         return "%s (coop_id=%6s)" % (self.name, self.coop_id)
     
     @property
-    def series(self):
+    def variable(self):
+        """Get the string indicating what type of data is contained in this
+        series."""
+        return self._variable_str
+    
+    @property
+    def series(self, begyr=None, endyr=None):
         """Get the actual data contained in this series."""
         return self._series
     
@@ -142,17 +168,30 @@ class Series(object):
     @property
     def first_year(self):
         """The year in which the data in this series begins."""
-        return self._first_year
+        return self._years[0]
     
     @property
     def last_year(self):
         """The last year for which there is data in this series."""
-        return (self._first_year + len(self._series) - 1)
+        return self._years[-1]
         
-    def set_series(self, series, first_year):
+    def trunc_series(self, begyr, endyr):
+        trunc_series = []
+        for (year, data) in zip(self._years, self._series):
+            if (begyr <= year and year < endyr):
+                trunc_series.append(data)
+        return trunc_series
+        
+    def set_series(self, series, years):
         """Set the actual data series in this object."""
-        self._first_year = first_year
+        self._years = list(years)
         self._series = list(series)
+        
+    @property
+    def years(self):
+        """Returns the list of years corresponding to the data in this Series
+        instance"""
+        return self._years        
         
     @property
     def monthly_series(self):
@@ -173,4 +212,32 @@ class Series(object):
             else:
                 new_list.append(obj)
         return new_list
-                
+    
+    def _fill_missing(self, series, years, fill_val):
+        """Determines where there are missing years in the provided series
+        of data and fills them with the provided fill value.
+        """
+        missing_yearly = [fill_val]*13
+        filled_series = []
+        filled_years = range(years[0], years[-1]+1)
+        for year in filled_years:
+            if year in years:
+                filled_series.append(series[years.index(year)])
+            else:
+                filled_series.append(missing_yearly)
+        
+        return filled_series, filled_years
+
+class MissingDataError(Exception):
+    """Exception raised if a user trys to instantiate a Station or Series 
+    object but fails to supply a necessary data field.
+    
+    :Ivar field:
+        The field which was not supplied.
+    
+    """
+    def __init__(self, field):
+        self.field = field
+        
+    def __repr__(self):
+        return "Need to supply data for the field %s." % self.field

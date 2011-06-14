@@ -12,10 +12,16 @@ into another workflow.
 """
 __docformat__ = "restructuredtext"
 
-#====================================================#
-# These parameters are universal and are used mostly #
-# for setting up the network of sites for analysis   #
-#====================================================#
+#: The following values are constants 
+
+#: The radius of the earth, in kilometers
+RADIUS_EARTH = 6371.0 
+
+####################################################################
+
+#: The following values will eventually be generated during the 
+#: homogenization workflow and contain metrics defining the 
+#: network of stations being analyzed.
 
 project = "TEST"
 """This is the reference name for the project. It will be used for
@@ -61,4 +67,7 @@ being performed."""
 nmo = numyr*12
 """The total number of months over which the homogenization analysis is 
 being performed."""
+
+
+
 

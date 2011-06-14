@@ -20,6 +20,7 @@ __docformat__ = "restructuredtext"
 import os
 import urllib
 import gzip
+import copy
 
 from ushcn_data import Station, Series
 
@@ -33,14 +34,18 @@ USHCN_STATION_LIST = "ushcn-stations.txt"
 #: site.
 USHCN_RAW_DATA_PATTERN = "9641C_200912_%s.%s"
 
-#: The element codes identifying what variable is contained in a USHCN dataset
-ELEM_CODES = { 'max':1, 'min':2, 'avg':3, 'pcp':4 }
+#: The element codes identifying what variable is contained in a USHCN dataset,
+#: and the scaling factor to convert the recorded values to observations.
+ELEM_CODES = { 1: { 'type': 'max', 'scale': 0.1 },
+               2: { 'type': 'min', 'scale': 0.1 },
+               3: { 'type': 'avg', 'scale': 0.1 },
+               4: { 'type': 'pcp', 'scale': 0.01 } }
+
+#: Possible types of USHCN data.
+ELEM_TYPES = [data['type'] for data in ELEM_CODES.values()]
 
 #: Possible sources of USHCN data.
 SOURCES = ['raw', 'tob', 'F52']
-
-#: Possible types of USHCN data.
-ELEM_TYPES = ELEM_CODES.keys()
 
 #: Possible flags on USHCN data values.
 USHCN_FLAGS = ['E', 'I', 'Q', 'X']
@@ -78,7 +83,7 @@ def get_ushcn_data(source, variable, stations=None):
     if source not in SOURCES:
         raise ArgumentError("source", source, proper=SOURCES)
     if variable not in ELEM_TYPES:
-        raise ArgumentError("variable", variable, proper=ELEM_TYPES)    
+        raise ArgumentError("variable", variable, proper=ELEM_CODES)    
     
     data_fn = (USHCN_RAW_DATA_PATTERN % (source, variable)) + ".gz"
     station_list_fn = USHCN_STATION_LIST
@@ -120,6 +125,8 @@ def get_ushcn_data(source, variable, stations=None):
         all_stations[new_station.coop_id] = new_station
     station_list_file.close()
     
+    just_stations = copy.deepcopy(all_stations)
+        
     ## Now that we have all the stations and their corresponding metadata,
     ## we can process the data series associated with the station.    
     if stations:
@@ -141,12 +148,12 @@ def get_ushcn_data(source, variable, stations=None):
         station = all_stations[station_id]
         
         if station_id in appended_stations:
-            station.series = station.series + [yearly_data]
-            #all_stations[station_id] = station
+            station.update_values(series=(station.series+[yearly_data]),
+                                  years=(station.years+[year]))
         else:
             if station_id in stations:
                 station.update_values(series=[yearly_data], first_year=year,
-                                      variable=variable)
+                                      variable=variable, years=[year])
                 appended_stations.append(station_id)
                 
     all_series = dict()
@@ -154,19 +161,55 @@ def get_ushcn_data(source, variable, stations=None):
         station = all_stations[station_id]
         series = Series(**station.values_dict)
         all_series[station_id] = series
-    return all_series
+        #write_series(series, data_dir)
+        
+    return all_series, just_stations
 
 def read_ushcn_dataset_string(data_str):
-    """
+    """Parse a line in a USHCN master dataset file and return the information
+    about monthly/annual values and station identifying details contained
+    in that line for use elsewhere.
     
+    USHCN master dataset files are ASCII files which contain an entire dataset
+    for a given variable and analysis product on multiple lines. A sample line
+    from one of these files is:
+    
+    01108431930   520    585    577    673    761    805    854    823  \\
+        792    644E   584    483E   675E
+    
+    The first 11 characters, the "identifier", indicate the station where this
+    line of data was recorded, the type of data it represents, and the year the
+    data was observed. Here, we are looking at station 011084. The 7th
+    character, 4, indicates that this is average monthly temperatures. The final
+    4 characters, 1930, give the year this entry corresponds to.
+    
+    The next 12 values are monthly records from January -> December. The final
+    13th value is an annual average. If a data entry is "missing," a value of
+    -9999 will be recorded in that column. In some cases, values may carry a 
+    one-character flag following them.
+    
+    In the above example, this method will return a list containg the values
+    found for (id, variable, year, monthly, annual):
+    
+    ["011084", 3, 1930, [52.0, 58.5, 57.7, 67.43, 76.1, 80.5, 85.4, 82.3, \\
+        79.2, 64.4, 58.4, 48.3], 67.5]
+        
+    :Param data_str:   
+        The string read from a USHCN master dataset file to be parsed.
+        
+    :Return:
+        A list of the values found for (id, variable, year, monthly, annual).
+        id will be a 6-digit string, variable and year will be integers, monthly
+        will be a 12-element list of floats, and annual will be a float.
+        
     """
     data_str = data_str.strip()
     data_bits = data_str.split()
     
     identifier = data_bits[0]
     id = identifier[:6]
-    variable = identifier[6]
-    year = identifier[7:11]
+    variable = int(identifier[6])
+    year = int(identifier[7:11])
     
     monthly_values = data_bits[1:13]
     monthly = []
@@ -176,6 +219,7 @@ def read_ushcn_dataset_string(data_str):
             monthly.append(float(stripped_val))
         else:
             monthly.append(float(val))
+            
     annual_val = data_bits[-1]
     annual = None
     if is_flagged(annual_val):
@@ -194,6 +238,29 @@ def read_station_string(station_str):
     http://cdiac.ornl.gov/ftp/ushcn_v2_monthly/readme.txt. USHCN rigidly
     formats them, so this method anticipates the USHCN format and reads
     off the data accordingly.
+    
+    Example:
+    
+    013160  32.8347  -88.1342   38.1 AL GAINESVILLE LOCK \\
+              011694 ------ ------ +6
+    (station name allotment split to new line)
+    
+    This is the station metadata for a station at Gainesville Lock in 
+    Alabama with Coop ID 013160. Its (lat, lon) are (32.8347N, 88.1342W) and
+    it sits at an eleveation of 38.1 meters above sea level. At some point,
+    it was consolidated with a station with Coop ID 011694. Finally, it is
+    in the UTC+6 timezone. Passing this string to this method will return
+    a Station object with the following data:
+    
+        Station.coop_id = "013160"
+        Station.lat = 32.8347
+        Station.lon = -88.1342
+        Station.elev = 38.1
+        Station.state = "AL"
+        Station.name = "GAINESVILLE LOCK"
+        Station.coop_1 = "011694"
+        Station.coop_2 = Station.coop_3 = "------"
+        Station.utc_offset = 6
     
     :Param station_str:   
         The USHCN formatted string containing station metadata.
@@ -223,7 +290,7 @@ def read_station_string(station_str):
                           utc_offset=utc_offset)
     return new_station
 
-def write_station_string(station):
+def format_station_string(station):
     """Write a string containing a station's metadata, as formatted by USHCN.
     
     :Param station:
@@ -238,6 +305,23 @@ def write_station_string(station):
                           '{coop_3:6} {utc_offset:+d}\n'
     return station_str_builder.format(**station.values_dict)
 
+def write_series(series, out_dir=None):
+    """Write a single file similar to a USHCN master dataset file, but which
+    contains only the data for the provided series."""
+    if not out_dir:
+        out_dir = os.getcwd()
+    
+    coop_id = series.coop_id
+    variable_str = series.variable
+    out_file_name = "%s_%s.raw" % (coop_id, variable_str)
+    out_file = open(os.path.join(out_dir, out_file_name), 'wb')
+    
+    for (year, data) in zip(series.years, series.series):
+        data = map(int, data[:-1])
+        data_str = "".join(["{: >5d}  ".format(val) for val in data])
+        out_str = "%6s %4d %s\n" % (coop_id, year, data_str)
+        out_file.write(out_str)
+    out_file.close()    
 
 class ArgumentError(Exception):
     """Exception raised for keyword arguments which are undefined or invalid.
@@ -255,7 +339,7 @@ class ArgumentError(Exception):
         self.val = val
         self.proper = proper
         
-    def __str__(self):
+    def __repr__(self):
         error_str = ""
         if isinstance(self.val, str):
             error_str = "%s is an invalid value for %s." % (self.val, self.key)
