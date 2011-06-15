@@ -15,11 +15,12 @@ from math import pi
 # ccf-homogenization imports
 from ushcn_data import Station
 from parameters import RADIUS_EARTH
-from util import compute_arc_dist, compute_monthly_anomalies
+from util import compute_arc_dist, compute_monthly_anomalies, compute_mean
+from util import compute_corr, compute_std
 
-class TimeseriesChecks(unittest.TestCase):
+class TimeseriesMathChecks(unittest.TestCase):
     
-    #: These are test monthly datasets
+    #: These are test monthly datasets for computing anomalies
     dataset1 = [20, 30, -9999, 50, 60]
     dataset2 = [20, 30, 40, 50, 60, 70]
     dataset3 = [-9999, -9999, -9999, -9999]
@@ -29,15 +30,91 @@ class TimeseriesChecks(unittest.TestCase):
         anomalies = compute_monthly_anomalies(self.dataset1, -9999.)
         self.assertEquals(anomalies, [-20, -10, -9999, 10, 20])
         
+        mean = compute_mean(self.dataset1, -9999)
+        self.assertEquals(mean, 40.0)
+        
+        std = compute_std(self.dataset1, -9999)
+        self.assertAlmostEquals(std, 18.2574, delta=1e-3)
+        
     def testDataset2(self):
         """Dataset with no missing values"""
         anomalies = compute_monthly_anomalies(self.dataset2, -9999.)
         self.assertEquals(anomalies, [-25, -15, -5, 5, 15, 25])
         
+        mean = compute_mean(self.dataset2, -9999)
+        self.assertEquals(mean, 45.0)
+        
+        std = compute_std(self.dataset2, -9999)
+        self.assertAlmostEquals(std, 18.7082, delta=1e-3)
+        
     def testDataset3(self):
         """Dataset with only missing values"""
         anomalies = compute_monthly_anomalies(self.dataset3, -9999.)
         self.assertEquals(anomalies, [-9999, -9999, -9999, -9999])
+        
+        mean = compute_mean(self.dataset3, -9999)
+        self.assertEquals(mean, -9999)
+        
+        std = compute_mean(self.dataset3, -9999)
+        self.assertAlmostEquals(std, -9999, delta=1e-3)
+        
+    def testCorrelation1(self):
+        """A random dataset found at 
+        http://www.stat.wmich.edu/s216/book/node122.html"""
+        x = [1, 3, 4, 4]
+        y = [2, 5, 5, 8]
+        r = compute_corr(x, y, valid=True)
+        self.assertAlmostEquals(r, 0.866, delta=1e-3)
+        
+    def testCorrelation2(self):
+        """Another random dataset from 
+        http://www.socialresearchmethods.net/kb/statcorr.php"""
+        x = [68, 71, 62, 75, 58, 60, 67, 68, 71, 69, 68, 67, 63, 62, 60, 63, 65,
+             67, 63, 61]
+        y = [4.1, 4.6, 3.8, 4.4, 3.2, 3.1, 3.8, 4.1, 4.3, 3.7, 3.5, 3.2, 3.7, 3.3,
+             3.4, 4.0, 4.1, 3.8, 3.4, 3.6]
+        r = compute_corr(x, y, valid=True)
+        self.assertAlmostEquals(r, 0.73, delta=1e-3)
+        
+    def testCorrelation3(self):
+        """Too little data should yield correlation of None"""
+        x = [1, ]
+        y = [2, ]
+        r = compute_corr(x, y, -9999)
+        self.assertIsNone(r)
+        
+    def testCorrelation4(self):
+        """Correlation between same dataset should be 1.0"""
+        x = [1-1e9, 0, 1+1e9]
+        r = compute_corr(x, x, valid=True)
+        self.assertAlmostEquals(r, 1.0, delta=1e-3)
+    
+    def testCorrelation5(self):
+        """Correlation between datasets with standard deviation
+        of 0 should raise a ZeroDivisonError"""
+        x = [1-1e9, 1-1e9, 1-1e9]
+        y = [1+1e9, 1+1e9, 1+1e9]
+        self.assertRaises(ZeroDivisionError, compute_corr, x, y, valid=True)
+        
+    def testStd1(self):
+        """Shouldn't be able to compute std if less than 2 values"""
+        miss = -9999
+        data = [3.3]
+        std = compute_std(data, miss, valid=True)
+        self.assertEquals(std, miss)
+        
+    def testStd2(self):
+        """Should return the missing value if empty dataset given."""
+        miss = -9999
+        data = []
+        std = compute_std(data, miss)
+        self.assertEquals(std, miss)
+
+    
+    
+
+        
+    
 
 class SphereMathChecks(unittest.TestCase):
     

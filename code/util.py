@@ -12,71 +12,99 @@ from math import cos, acos, sin, radians, sqrt
 # ccf-homogenization imports
 from parameters import RADIUS_EARTH
 
-def compute_corr(x, y, missing_val=-9999):
+def get_valid_data(data, missing_val=-9999):
+    """Return only the valid values in a dataset.
+    
+    :Param data:
+        A list of data values.
+    :Param missing_val:
+        The placeholder for missing values in the dataset.
+    :Return:
+        A list of data, with elements matching missing_val removed.
+    
+    """
+    valid_data = [val for val in data if val != missing_val]
+    return valid_data
+
+def compute_std(data, missing_val=-9999, valid=False):
+    """Computes the unbiased sample standard deviation of a set of data.
+    
+    :Param data:
+        A list of data values.
+    :Param missing_val:
+        The placeholder for missing values in the dataset.
+    :Param valid:
+        (optional) Boolean flag indicating that the data has already been 
+        sanitized of missing values
+    :Return:
+        The standard deviation of the dataset. If the dataset has less than 2
+        valid entries in it, then return missing_val as the standard deviation
+        (we can't compute the standard deviation for 0 or 1 data).
+    
+    """
+    if not valid:
+        data = get_valid_data(data, missing_val)
+    
+    data_mean = compute_mean(data, missing_val, valid=True)
+    nval = len(data)
+    
+    if nval < 2:
+        return missing_val    
+    
+    std = sqrt(sum((d-data_mean)**2 for d in data)/(nval-1))
+    return std
+
+
+def compute_corr(x, y, missing_val=-9999, valid=False):
     """Computes the Pearson Correlation Coefficient between two sets of data.
     
     The Pearson Correlation Coefficient is a measure of the linear dependence
     between two sets of data mapped between [-1, 1]. This method only considers
     values of i where both X[i] and Y[i] are good - that is, not missing.
     
+    The code presented here is based in part on a routine written by David
+    Jones, http://code.google.com/p/amberfrog/source/browse/trunk/zontem/code/correlation.py.
+    
     :Param x,y:
-        The datasets for which the correlation should be computed.
+        The datasets for which the correlation should be computed, supplied as a
+        list of floats or ints.
     :Param missing_val:
         The placeholder for missing values in either dataset.
+    :Param valid:
+        (optional) Boolean flag indicating that both datasets have already been 
+        sanitized of missing values
     :Return:
-        Correlation coefficient, standard deviation of x, standard deviation of
-        y.
+        Correlation coefficient (r in [-1.0, 1.0]) if both x and y have 
+        equal amounts of valid data (more than 0); otherwise, returns None.
     
     """
-    ## Need a very small value because the numerics here can be contaminated
-    ## by round-off error, which can cause trouble if we're dividing by small
-    ## numbers.
-    eps = 1e-6
+    x = get_valid_data(x, missing_val)
+    y = get_valid_data(y, missing_val)
+    n = len(x)
+    assert len(y) == n # Computation assumes len(x_valid) == len(y_valid)
     
-    x_good = []
-    y_good = []
-    for (x_val, y_val) in zip(x,y):
-        if (x_val != missing_val and y_val != missing_val):
-            x_good.append(x_val)
-            y_good.append(y_val)
-    
-    ## Is there actually data to work with? If not, don't bother doing
-    ## any math, and return r = 0, x_std = 0, y_std = 0
-    if not (x_good and y_good):
-        return 0, 0, 0
-    
-    x_bar, nx = compute_mean(x_good, missing_val)
-    y_bar, ny = compute_mean(y_good, missing_val)
-    
-    ## Compute standard deviation of x, y
-    x_std = 0.0
-    y_std = 0.0
-    n_std = 0.
-    for (x_val, y_val) in zip(x_good, y_good):
-        x_std = x_std + (x_val-x_bar)**2
-        y_std = y_std + (y_val-y_bar)**2
-        n_std = n_std+1
-    x_std = sqrt(x_std/n_std)
-    y_std = sqrt(y_std/n_std)
-    
-    ## Use the standard deviations and means to now compute the actual
+    ## If there were fewer than 2 valid datavalues in each set, then we can't
+    ## compute the standard deviation and therefore can't compute the
     ## correlation coefficient.
-    sum = 0.0
-    n_sum = 0.
-    for (x_val, y_val) in zip(x_good, y_good):
-        sum = sum + ((x_val-x_bar)*(y_val-y_bar))
-        n_sum = n_sum+1
-    ## Replace standard deviations if they're small enough to cause numerical
-    ## troubles.
-    if x_std < eps:
-        x_std = eps
-    if y_std < eps:
-        y_std = eps    
-    r = sum/((n_sum-1)*x_std*y_std)
+    if n < 2:
+        return None
+        
+    ## Now, there are no missing data in x_valid or y_valid, so we can pass
+    ## a flag to the mean and std functions to avoid having to filter through
+    ## the data second and third times.
+    x_bar = compute_mean(x, missing_val, valid=True)
+    y_bar = compute_mean(y, missing_val, valid=True)
     
-    return r, x_std, y_std
-
-def compute_mean(data, missing_val=-9999):
+    numerator = sum((xi-x_bar)*(yi-y_bar) for (xi, yi) in zip(x, y))    
+    
+    x_std = compute_std(x, missing_val, valid=True)
+    y_std = compute_std(y, missing_val, valid=True)
+    
+    rank = numerator/((n-1)*x_std*y_std) # Divide-by-zero is possible, and
+                                         # should throw an exception.
+    return rank
+    
+def compute_mean(data, missing_val=-9999, valid=False):
     """Computes the mean of a given set of data, with the possibility that
     the dataset contains missing values.
     
@@ -84,27 +112,27 @@ def compute_mean(data, missing_val=-9999):
         The data over which to compute the mean.
     :Param missing_val:
         The placeholder for missing values in the dataset.
+    :Param valid:
+        (optional) Boolean flag indicating that the data has already been 
+        sanitized of missing values
     :Return:
         The mean of the dataset and the number of values used to compute it. If
         all the data was missing, will return missing_val.
     
     """
+    if not valid:
+        data = get_valid_data(data, missing_val)
     
-    total = 0.
-    nval = 0.
-    for val in data:
-        if val != missing_val:
-            total = total + val
-            nval = nval + 1.
+    total = sum(data)*1.0
+    nval = len(data)*1.0 # Convert to float just to avoid integer truncation
     
-    if nval > 0:
-        mean = total/nval
-    else:
-        mean = missing_val
+    ## If there aren't any valid_data, then we'll return missing_val now
+    if not nval: 
+        return missing_val
+    
+    mean = total/nval
+    return mean 
         
-    return (mean, nval)
-        
-
 def compute_first_diff(monthly_data, missing_val=-9999):
     """Computes the first-order timeseries differences for a dataset.
     
@@ -156,7 +184,9 @@ def compute_monthly_anomalies(monthly_data, missing_val=-9999):
         A list of the same dimensions as monthly_data, but containing
     
     """
-    mean, nval = compute_mean(monthly_data, missing_val)
+    mean = compute_mean(monthly_data, missing_val)
+    valid_data = get_valid_data(monthly_data, missing_val)
+    nval = len(valid_data)
             
     ## Did we actually accumulate values? If not, then all the data
     ## is missing values, so just return the original list.

@@ -4,21 +4,21 @@ from operator import itemgetter
 
 from ushcn_data import Station, Series
 from util import compute_arc_dist, compute_monthly_anomalies
-from util import compute_first_diff, compute_corr
+from util import compute_first_diff, compute_corr, compute_std
 
 data_src = "raw"
 variable = "max"
 
-nstns = 21
+nstns = 1000
 hidist = 500.
 distinc = 200.
-numsrt = 10
+numsrt = 30
 begyr = 1920
 endyr = 1960
 
 all_series, all_stations = ushcn_io.get_ushcn_data(data_src, variable)
 
-station_ids = sorted(random.sample(all_stations.keys(), 21))
+station_ids = sorted(random.sample(all_stations.keys(), nstns))
 stations = dict(zip(station_ids, [all_stations[s] for s in station_ids]))
 
 series_list = [all_series[station] for station in station_ids]
@@ -70,6 +70,11 @@ for s in series.itervalues():
     
 print "Determining correlated neighbors"
 
+##### WARNING WARNING WARNING #####
+## It still might be possible that the truncated series are **too short**. 
+## Will need to go into ushchn_data and be sure that the data is padded to fill
+## out begyr to endyr.
+
 all_corrs = dict()
 for coop_id1 in station_ids:
     
@@ -98,7 +103,9 @@ for coop_id1 in station_ids:
         neighb_dif = compute_first_diff(neighb_align, MISS)
         
         print ".........Computing correlation coefficient"
-        r, cand_std, neighb_std = compute_corr(cand_dif, neighb_dif, MISS)
+        r = compute_corr(cand_dif, neighb_dif, MISS)
+        cand_std = compute_std(cand_dif, MISS)
+        neighb_std = compute_std(neighb_dif, MISS)
         print "            %1.3f %3.3f %3.3f" % (r, cand_std, neighb_std)
 
 network = dict(stations=stations, series=series, neighbors=all_neighbors)
