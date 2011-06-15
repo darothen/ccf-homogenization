@@ -168,8 +168,10 @@ def get_ushcn_data(params):
                 appended_stations.append(station_id)
                 
     all_series = dict()
+    years = range(params.begyr, params.endyr)
     for station_id in stations:
         station = all_stations[station_id]
+        station.update_values(subset_years=years)
         series = Series(**station.values_dict)
         all_series[station_id] = series
         #write_series(series, data_dir)

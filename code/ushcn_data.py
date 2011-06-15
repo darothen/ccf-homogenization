@@ -126,17 +126,21 @@ class Series(object):
 
         series = None
         years = None
+        subset_years = None
         if 'series' in k:
             if not 'years' in k:
                 raise MissingDataError("years")
             series = k['series']
             years = k['years']
+            if 'subset_years' in k:
+                subset_years = k['subset_years']
             
             ## We have data, but there's probably missing years in there. We
             ## need to go ahead and fill in missing data so that we have 
             ## semi-continuous data (or at least, continuous placeholders for
             ## data) running from years[0] to years[-1].
-            series, years = self._fill_missing(series, years, self.MISSING_VAL)
+            series, years = self._fill_missing(series, years, self.MISSING_VAL,
+                                               subset_years)
             
             del k['series']
             del k['years']
@@ -220,13 +224,18 @@ class Series(object):
                 new_list.append(obj)
         return new_list
     
-    def _fill_missing(self, series, years, fill_val):
+    def _fill_missing(self, series, years, fill_val=-9999, subset_years=None):
         """Determines where there are missing years in the provided series
         of data and fills them with the provided fill value.
         """
         missing_yearly = [fill_val]*13
         filled_series = []
-        filled_years = range(years[0], years[-1]+1)
+        
+        if subset_years:
+            filled_years = subset_years
+        else:
+            filled_years = range(years[0], years[-1]+1)
+            
         for year in filled_years:
             if year in years:
                 filled_series.append(series[years.index(year)])

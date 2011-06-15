@@ -78,10 +78,16 @@ def compute_corr(x, y, missing_val=-9999, valid=False):
         equal amounts of valid data (more than 0); otherwise, returns None.
     
     """
+    #nox, noy = len(x), len(y)
     x = get_valid_data(x, missing_val)
     y = get_valid_data(y, missing_val)
     n = len(x)
     assert len(y) == n # Computation assumes len(x_valid) == len(y_valid)
+    
+    #print ""
+    #print "nox=%4d | noy=%4d" % (nox, noy)
+    #print " nx=%4d |  ny=%4d" % (n, n)
+    #print ""
     
     ## If there were fewer than 2 valid datavalues in each set, then we can't
     ## compute the standard deviation and therefore can't compute the
