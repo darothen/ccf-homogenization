@@ -156,7 +156,7 @@ class Series(object):
         return self._variable_str
     
     @property
-    def series(self, begyr=None, endyr=None):
+    def series(self):
         """Get the actual data contained in this series."""
         return self._series
     

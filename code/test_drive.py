@@ -9,12 +9,12 @@ from util import compute_first_diff, compute_corr, compute_std
 data_src = "raw"
 variable = "max"
 
-nstns = 1000
-hidist = 500.
+nstns = 100
+hidist = 200.
 distinc = 200.
-numsrt = 30
+numsrt = 20
 begyr = 1920
-endyr = 1960
+endyr = 1980
 
 all_series, all_stations = ushcn_io.get_ushcn_data(data_src, variable)
 
