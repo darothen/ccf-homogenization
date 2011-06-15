@@ -58,34 +58,45 @@ def is_flagged(value):
             return True
     return False
 
-def get_ushcn_data(source, variable, stations=None):    
+#def get_ushcn_data(source, variable, stations=None):
+def get_ushcn_data(params):
     """Download USHCN datasets for use in a homogenization algorithm.
     
-    :Param source:
+    :Param params:
+        A parameter object which contains the user-defined parameters for a
+        give homogenization project. At a *minimum*, params must contain the
+        following valus:
+        
+        params.data_src
+        params.variable
+        
+        These values define both the source USHCN dataset and the variable to 
+        download from the NCDC FTP server.
+        
         The source dataset provided by USHCN which the user wishes to download;
         must be either "F52" (bias-adjusted mean monthly values with
         estimates for missing values), "tob" (mean monthly values adjusted only
         for the time of observation bias), or "raw" (unadjusted mean monthly
         values).
-    :Param variable:
+        
         The variable whose mean monthly values the user wishes to download; must
         be either "max" (monthly maximum temperatures), "min" (monthly minimum
         temperatures), "avg" (average of monthly maximum and minimum
         temperatures), or "pcp" (total monthly precipitation).
-    :Param stations:
-        (optional) A list stations whose data should be returned. If omitted,
-        this method will return all the data it finds.
+    
+        Optionally, a list of station coop_ids can be supplied as params.stations
+        if the user only wishes to extract a subset of stations' data.
         
     :Return:
         A collection of USHCN data series.
         
     """
-    if source not in SOURCES:
-        raise ArgumentError("source", source, proper=SOURCES)
-    if variable not in ELEM_TYPES:
-        raise ArgumentError("variable", variable, proper=ELEM_CODES)    
+    if params.data_src not in SOURCES:
+        raise ArgumentError("source", params.data_src, proper=SOURCES)
+    if params.variable not in ELEM_TYPES:
+        raise ArgumentError("variable", params.variable, proper=ELEM_CODES)    
     
-    data_fn = (USHCN_RAW_DATA_PATTERN % (source, variable)) + ".gz"
+    data_fn = (USHCN_RAW_DATA_PATTERN % (params.data_src, params.variable)) + ".gz"
     station_list_fn = USHCN_STATION_LIST
     
     data_dir = os.path.join(os.getcwd(), "data")
@@ -129,8 +140,8 @@ def get_ushcn_data(source, variable, stations=None):
         
     ## Now that we have all the stations and their corresponding metadata,
     ## we can process the data series associated with the station.    
-    if stations:
-        stations = sorted(stations)
+    if hasattr(params, 'stations'):
+        stations = sorted(params.stations)
     else:
         stations = sorted(all_stations.keys())
     

@@ -177,6 +177,13 @@ class Series(object):
         
     def trunc_series(self, begyr, endyr):
         trunc_series = []
+#        new_years = range(begyr, endyr)
+#        for year in new_years:
+#            if year in self._years:
+#                year_idx = self._years.index(year)
+#                trunc_series.append(self._data[year_idx])
+#            else:
+#                trunc_series.append()
         for (year, data) in zip(self._years, self._series):
             if (begyr <= year and year < endyr):
                 trunc_series.append(data)
