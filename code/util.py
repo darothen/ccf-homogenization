@@ -9,6 +9,8 @@ __docformat__ = "restructuredtext"
 
 # http://docs.python.org/library/math.html
 from math import cos, acos, sin, radians, sqrt
+# http://docs.python.org/library/operator.html
+from operator import itemgetter
 # ccf-homogenization imports
 from parameters import RADIUS_EARTH
 
@@ -83,11 +85,6 @@ def compute_corr(x, y, missing_val=-9999, valid=False):
     y = get_valid_data(y, missing_val)
     n = len(x)
     assert len(y) == n # Computation assumes len(x_valid) == len(y_valid)
-    
-    #print ""
-    #print "nox=%4d | noy=%4d" % (nox, noy)
-    #print " nx=%4d |  ny=%4d" % (n, n)
-    #print ""
     
     ## If there were fewer than 2 valid datavalues in each set, then we can't
     ## compute the standard deviation and therefore can't compute the
@@ -179,35 +176,64 @@ def compute_first_diff(monthly_data, missing_val=-9999):
     return first_diffs
     
 
-def compute_monthly_anomalies(monthly_data, missing_val=-9999):
-    """Computes monthly anomalies given a monthly series of data.
+def compute_monthly_anomalies(yearly_data, missing_val=-9999):
+    """Computes monthly anomalies given a series of data.
     
-    :Param monthly_data:
-        The monthly data to compute anomalies for.
+    Monthly anomalies can be ambiguous defined, but here, a monthly anomaly
+    is computed by taking the mean value for all of a specific month in a
+    dataset. That is, if you have a list of yearly/monthly data, the anomaly for 
+    January will be computed by taking the mean value of all January data
+    entries, and subtracting each January value from that mean.
+    
+    :Param yearly_data:
+        The yearly data to compute anomalies for, with dimensions (nyears x 12)
     :param missing_val:
         The placeholder for missing data which shouldn't be accumulated.
     :Return:
-        A list of the same dimensions as monthly_data, but containing
+        A list of the same dimensions as yearly_data, but containing
+        anomalies instead of the original values.
+    
+    -----------------
+    
+    NOTE - This is probably terribly inefficient and kind of silly, but works
+    exactly as it is supposed to. I'll come back and try to write a clearer
+    function in the future (this is where numpy and being able to slice multi-
+    dimensional arrays would be super handy!)
     
     """
-    mean = compute_mean(monthly_data, missing_val)
-    valid_data = get_valid_data(monthly_data, missing_val)
-    nval = len(valid_data)
-            
-    ## Did we actually accumulate values? If not, then all the data
-    ## is missing values, so just return the original list.
-    if not nval:
-        return monthly_data
     
+    nyears = len(yearly_data)
+    nmonths = 12
     anomalies = []
-    for val in monthly_data:
-        if val != missing_val:
-            anomalies.append(val - mean)
+    for i_month in range(nmonths):
+        all_months_data = map(itemgetter(i_month), yearly_data)
+        month_mean = compute_mean(all_months_data, missing_val)
+        if i_month == 0:
+            for i_year in range(nyears):
+                anomalies.append([anomaly(all_months_data[i_year],
+                                          month_mean, missing_val)])
         else:
-            anomalies.append(missing_val)
+            for i_year in range(nyears):
+                anomalies[i_year].append(anomaly(all_months_data[i_year],
+                                                  month_mean, missing_val))
+    return anomalies
+
+def anomaly(val, base, missing_val=-9999):
+    """Computes an anomaly given a value and a baseline.
     
-    return anomalies    
+    :Param val:
+        The value to compute the anomaly from.
+    :Param base:
+        The base used to compute the anomaly.
+    :Return:
+        The anomaly, val-base. If val==missing_val, will return missing_val
+        instead.
     
+    """
+    if val == missing_val:
+        return missing_val
+    else:
+        return (val - base)
 
 def compute_arc_dist(station1=None, station2=None,
                      lat1=None, lon1=None, lat2=None, lon2=None):

@@ -3,7 +3,7 @@
 export USHCNBASE=`pwd`
 
 UCP=UCPM24aM21fC6bL1Si6cR5aH1
-MODE=DBUG
+MODE=FAST
 CASE=21_21
 
 # Create a 'bin' top-level directory to house the executable
@@ -13,6 +13,6 @@ mkdir -p $USHCNBASE/bin
 ./src_codes/lib/scripts/compile.csh $MODE $CASE $USHCNBASE
 
 # Call benchmark script
-./src_codes/benchmark/scripts/case7_bench.sh $UCP $USHCNBASE
+#./src_codes/benchmark/scripts/case7_bench.sh $UCP $USHCNBASE
 
 

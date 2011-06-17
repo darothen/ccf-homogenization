@@ -174,6 +174,7 @@ def get_ushcn_data(params):
         station.update_values(subset_years=years)
         series = Series(**station.values_dict)
         all_series[station_id] = series
+
         #write_series(series, data_dir)
         
     return all_series, just_stations
@@ -313,9 +314,12 @@ def format_station_string(station):
     :Return:
         A string containing a station's metadata in the USHCN specified format.
     """    
-    station_str_builder = '{coop_id:6} {lat:>8.4f} {lon: >9.4f} {elev:>6.1f} ' \
-                          '{state:2} {name:30} {coop_1:6} {coop_2:6} ' \
-                          '{coop_3:6} {utc_offset:+d}\n'
+    #station_str_builder = '{coop_id:6} {lat:>8.4f} {lon: >9.4f} {elev:>6.1f} ' \
+    #                      '{state:2} {name:30} {coop_1:6} {coop_2:6} ' \
+    #                      '{coop_3:6} {utc_offset:+d}\n'
+    #return station_str_builder.format(**station.values_dict)
+    station_str_builder = '{coop_id:6} {lat:>8.4f} {lon: >9.4f} {coop_1:6} {coop_2:6} ' \
+                          '{coop_3:6} \n'
     return station_str_builder.format(**station.values_dict)
 
 def write_series(series, out_dir=None):
