@@ -50,10 +50,10 @@ SOURCES = ['raw', 'tob', 'F52']
 #: Possible flags on USHCN data values.
 USHCN_FLAGS = ['E', 'I', 'Q', 'X']
 
-def is_flagged(value):
+def is_flagged(value, flags=USHCN_FLAGS):
     """Determines if a raw value carries a USHCN flag, signifying that it was
     estimated in some way."""
-    for flag in USHCN_FLAGS:
+    for flag in flags:
         if value.endswith(flag):
             return True
     return False
@@ -359,15 +359,7 @@ class ArgumentError(Exception):
         self.proper = proper
         
     def __repr__(self):
-        error_str = ""
-        if isinstance(self.val, str):
-            error_str = "%s is an invalid value for %s." % (self.val, self.key)
-        elif isinstance(self.val, int):
-            error_str = "%d is an invalid value for %s." % (self.val, self.key)
-        elif isinstance(self.val, float):
-            error_str = "%f is an invalid value for %s." % (self.val, self.key)
-        else:
-            return "An invalid value was provided for %s." % self.key
+        error_str = "%r is an invalid value for %s." % (self.val, self.key)
         
         if self.proper:
             proper_vals_str = ("Accepted values are [" + 

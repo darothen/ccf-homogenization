@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 #
-# Daniel Rothenberg, 2011-06-13
+# Copyright (C) 2011 Daniel Rothenberg.
+# See Google Code project page for license, 
+# http://code.google.com/p/ccf-homogenization/
+#
+# Corresponding unit test cases are in ../test/math_tests.py
 
 """Utility functions for processing USHCN data.
 
@@ -42,7 +46,7 @@ def compute_std(data, missing_val=-9999, valid=False):
         The standard deviation of the dataset. If the dataset has less than 2
         valid entries in it, then return missing_val as the standard deviation
         (we can't compute the standard deviation for 0 or 1 data).
-    
+        
     """
     if not valid:
         data = get_valid_data(data, missing_val)
@@ -56,8 +60,7 @@ def compute_std(data, missing_val=-9999, valid=False):
     std = sqrt(sum((d-data_mean)**2 for d in data)/(nval-1))
     return std
 
-
-def compute_corr(x, y, missing_val=-9999, valid=False):
+def compute_corr(x, y, missing_val=-9999, valid=False, aligned=False):
     """Computes the Pearson Correlation Coefficient between two sets of data.
     
     The Pearson Correlation Coefficient is a measure of the linear dependence
@@ -75,28 +78,46 @@ def compute_corr(x, y, missing_val=-9999, valid=False):
     :Param valid:
         (optional) Boolean flag indicating that both datasets have already been 
         sanitized of missing values
+    :Param aligned:
+        (optional) Boolean flag indicating that both datasets have already been
+        aligned such that X[i] = Y[i]
     :Return:
         Correlation coefficient (r in [-1.0, 1.0]) if both x and y have 
         equal amounts of valid data (more than 0); otherwise, returns None.
+        
+    ...
+    
+    :Raises ZeroDivisionError:
+        If the computed standard deviation for either x or y is 0.
     
     """
-    ## Align x and y so that we are computing correlations only where
-    ## both x[i] and y[i] are valid data. This will also eliminate all the
-    ## missing values in the end x and y lists, so we can pass the "valid"
-    ## argument on to later computations.
-    if not valid:
+    # Align x and y so that we are computing correlations only where
+    # both x[i] and y[i] are valid data. This will also eliminate all the
+    # missing values in the end x and y lists, so we can pass the "valid"
+    # argument on to later computations.
+    if not aligned:
         aligned_zip = [(xi, yi) for xi, yi in zip(x, y) if ((xi != missing_val) and 
                                                         (yi != missing_val))]
+        # Is there any aligned data? If not, we can't do any computations,
+        # so return missing_val)
+        if not aligned_zip: return
+        # Otherwise, re-assign the aligned data.        
         x, y = zip(*aligned_zip)
+        
+        valid = True # Guaranteed to not have missing values now.
+    
+    # Are there missing values in the data? Let's get rid of them so they
+    # don't mess up the computations here.
+    if not valid:
+        x = get_valid_data(x, missing_val)
+        y = get_valid_data(y, missing_val)
     
     n = len(x)
     assert len(y) == n # Computation assumes len(x_valid) == len(y_valid)
     
     ## If there were fewer than 2 valid data values in each set, then we can't
     ## compute the standard deviation and therefore can't compute the
-    ## correlation coefficient. The USHCN code has a higher threshold, and
-    ## further requires that there actually be 8 months of overlap for stations
-    ## to be correlated as pairs. We'll use that higher threshold here.
+    ## correlation coefficient. 
     if n < 2:
         return None
         
@@ -111,7 +132,7 @@ def compute_corr(x, y, missing_val=-9999, valid=False):
     x_std = compute_std(x, missing_val, valid=True)
     y_std = compute_std(y, missing_val, valid=True)
     
-    rank = numerator/((n-1)*x_std*y_std) # Divide-by-zero is possible, and
+    rank = numerator/((n-1)*x_std*y_std) # Divide-by-zero is possible, and 
                                          # should throw an exception.
     return rank
     
@@ -134,8 +155,8 @@ def compute_mean(data, missing_val=-9999, valid=False):
     if not valid:
         data = get_valid_data(data, missing_val)
     
-    total = sum(data)*1.0
-    nval = len(data)*1.0 # Convert to float just to avoid integer truncation
+    total = sum(data)
+    nval = float(len(data)) # Need float to avoid integer truncation
     
     ## If there aren't any valid_data, then we'll return missing_val now
     if not nval: 
@@ -187,7 +208,7 @@ def compute_first_diff(monthly_data, missing_val=-9999):
 def compute_monthly_anomalies(yearly_data, missing_val=-9999):
     """Computes monthly anomalies given a series of data.
     
-    Monthly anomalies can be ambiguous defined, but here, a monthly anomaly
+    Monthly anomalies can be ambiguously defined, but here, a monthly anomaly
     is computed by taking the mean value for all of a specific month in a
     dataset. That is, if you have a list of yearly/monthly data, the anomaly for 
     January will be computed by taking the mean value of all January data
@@ -201,27 +222,26 @@ def compute_monthly_anomalies(yearly_data, missing_val=-9999):
         A list of the same dimensions as yearly_data, but containing
         anomalies instead of the original values.
     
-    -----------------
-    
-    NOTE - This is probably terribly inefficient and kind of silly, but works
-    exactly as it is supposed to. I'll come back and try to write a clearer
-    function in the future (this is where numpy and being able to slice multi-
-    dimensional arrays would be super handy!)
-    
     """
-    
-    nyears = len(yearly_data)
+    nyears = len(yearly_data) 
     nmonths = 12
     anomalies = []
-    for i_month in range(nmonths):
-        all_months_data = map(itemgetter(i_month), yearly_data)
+    for imonth in xrange(nmonths):
+        
+        # Get **all** the data for this month
+        all_months_data = map(itemgetter(imonth), yearly_data)
         month_mean = compute_mean(all_months_data, missing_val)
-        if i_month == 0:
-            for i_year in range(nyears):
+        
+        # If this is the first month (first time through the loop), then
+        # we need to append nyears list to anomalies - one list to hold
+        # the 12 months data for each year.
+        if imonth == 0:
+            for i_year in xrange(nyears):
                 anomalies.append([anomaly(all_months_data[i_year],
                                           month_mean, missing_val)])
+        # Beyond that, just append to the list we have.
         else:
-            for i_year in range(nyears):
+            for i_year in xrange(nyears):
                 anomalies[i_year].append(anomaly(all_months_data[i_year],
                                                   month_mean, missing_val))
     return anomalies
@@ -270,7 +290,7 @@ def compute_arc_dist(station1=None, station2=None,
     :Param lat1, lon1:
         The latitude and longitude of the first station, in degrees.
     :Param lat2, lon2: 
-        The latitude and longitude of the second staiton, in degrees.
+        The latitude and longitude of the second station, in degrees.
     :Return:
         The arc-distance between the two Stations, in kilometers.
     
@@ -290,5 +310,4 @@ def compute_arc_dist(station1=None, station2=None,
     arc_dist = arc_angle*RADIUS_EARTH
     
     return arc_dist
-    
     

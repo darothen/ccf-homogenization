@@ -197,7 +197,7 @@ for coop_id1 in station_ids:
         # Now, we can actually compute the correlation coefficient. Again,
         # see util.compute_corr() for info on this mathematical operation.
         print ".........Computing correlation coefficient"
-        r = compute_corr(cand_dif, neighb_dif, MISS)
+        r = compute_corr(cand_dif, neighb_dif, MISS, aligned=True)
         #r = compute_corr(cand_align, neighb_align, MISS)
         cand_std = compute_std(cand_dif, MISS)
         neighb_std = compute_std(neighb_dif, MISS)

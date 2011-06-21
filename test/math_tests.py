@@ -15,7 +15,7 @@ from math import pi
 # ccf-homogenization imports
 from ushcn_data import Station
 from parameters import RADIUS_EARTH
-from util import compute_arc_dist, compute_monthly_anomalies, compute_mean
+from util import compute_arc_dist, compute_mean, anomaly
 from util import compute_corr, compute_std
 
 class TimeseriesMathChecks(unittest.TestCase):
@@ -26,10 +26,7 @@ class TimeseriesMathChecks(unittest.TestCase):
     dataset3 = [-9999, -9999, -9999, -9999]
     
     def testDataset1(self):
-        """Dataset with one missing value"""
-        #anomalies = compute_monthly_anomalies(self.dataset1, -9999.)
-        #self.assertEquals(anomalies, [-20, -10, -9999, 10, 20])
-        
+        """Dataset with one missing value"""        
         mean = compute_mean(self.dataset1, -9999)
         self.assertEquals(mean, 40.0)
         
@@ -37,10 +34,7 @@ class TimeseriesMathChecks(unittest.TestCase):
         self.assertAlmostEquals(std, 18.2574, delta=1e-3)
         
     def testDataset2(self):
-        """Dataset with no missing values"""
-        #anomalies = compute_monthly_anomalies(self.dataset2, -9999.)
-        #self.assertEquals(anomalies, [-25, -15, -5, 5, 15, 25])
-        
+        """Dataset with no missing values"""        
         mean = compute_mean(self.dataset2, -9999)
         self.assertEquals(mean, 45.0)
         
@@ -48,10 +42,7 @@ class TimeseriesMathChecks(unittest.TestCase):
         self.assertAlmostEquals(std, 18.7082, delta=1e-3)
         
     def testDataset3(self):
-        """Dataset with only missing values"""
-        #anomalies = compute_monthly_anomalies(self.dataset3, -9999.)
-        #self.assertEquals(anomalies, [-9999, -9999, -9999, -9999])
-        
+        """Dataset with only missing values"""        
         mean = compute_mean(self.dataset3, -9999)
         self.assertEquals(mean, -9999)
         
@@ -116,6 +107,14 @@ class TimeseriesMathChecks(unittest.TestCase):
         data = []
         std = compute_std(data, miss)
         self.assertEquals(std, miss)
+        
+    def anomalies(self):
+        """Compute anomalies on a valid datum and invalid datum."""
+        x1 = 43
+        x2 = -9999
+        mean = 46
+        self.assertEquals(-3, anomaly(x1, mean))
+        self.assertEquals(-9999, anomaly(x2, mean))
     
 
 class SphereMathChecks(unittest.TestCase):
