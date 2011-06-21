@@ -41,14 +41,15 @@ test_stations = ['215887', '041912', '034572', '116738', '361354',
 default_params = dict(nstns=50, 
                       mindist=200.0, 
                       distinc=200.0, 
-                      numsrt=39,
-                      numcorr=39, 
+                      numsrt=40,
+                      numcorr=20, 
                       begyr=1900,
                       endyr=2010, 
                       data_src="raw", 
                       variable="max", 
                       stations=test_stations,
-                      corrlim=0.1)
+                      corrlim=0.1,
+                      minpair=14)
 params = parameters.default_parameters(**default_params)
 
 pprint.pprint(params)
@@ -85,7 +86,7 @@ for coop_id1 in station_ids:
     # Sort the dictionary of neighbors into a list, sorting from least
     # distance to greatest distances. Only take numsrt neighbors maximum.
     sorted_neighbors = sorted(neighbor_dict.iteritems(),
-                              key=itemgetter(1))[:params.numsrt]
+                              key=itemgetter(1))[:params.numsrt-1]
     
     # This code is actually superfluous, but it loops through the list of
     # sorted neighbors, and finds only the neighbors which are within a maximum
@@ -96,7 +97,7 @@ for coop_id1 in station_ids:
     iter = 1
     hidist = params.mindist
     print "...searching for neighbors within %4.1fkm" % params.mindist
-    while (len(close_neighbors) < params.numsrt):
+    while (len(close_neighbors) < params.numsrt-1):
         print "......iteration %d, %d neighbors found" % (iter, 
                                                           len(close_neighbors))
         for (coop_id, dist) in sorted_neighbors:
@@ -137,12 +138,9 @@ dist_out.close()
 # monthly anomalies. Then, flatten the data into a list with all the data
 # and length (endyr-begyr)*12
 for s in series.itervalues():
-
     data = s.series
     anomalies = compute_monthly_anomalies(data, -9999)
     s.set_series(anomalies, s.years)
-    monthly_series = s.monthly_series
-    s.set_series(monthly_series, s.years)
     
 print "Determining correlated neighbors"
 
@@ -206,34 +204,99 @@ for coop_id1 in station_ids:
         
         # If the correlation is above a threshold, we will keep it. In the
         # ushcn_corr_2004.v3 code, this threshold is 0.10.
-        if r and (r > params.corrlim):
+        if r:
             print "            %1.3f %3.3f %3.3f" % (r, cand_std, neighb_std)
             corr_dict[coop_id2] = r
+
         else:
             print "            poor or no correlation"
+           
+    sort_corrs = sorted(corr_dict.iteritems(),  
+                        key=itemgetter(1), reverse=True)
+    good_corrs = [coop_id2 for (coop_id2, r) in sort_corrs if r > params.corrlim]
+           
+    nmonths = (params.endyr-params.begyr)*12
+    ksum = [0]*nmonths
+    jsum = [0]*nmonths
+    lowtoo = [0]*nmonths
+    kstns = 0
+    # Determine ksum[nmonths], the number of neighbor data available to use 
+    # in homogenizing data for this station at each month
+    for imo in xrange(nmonths):
+        if cand_data[imo] != MISS:            
+            for (k, coop_id2) in zip(xrange(len(good_corrs)), good_corrs):
+                neighb = series[coop_id2]
+                neighb_data = neighb.monthly_series
+                if neighb_data[imo] != neighb.MISSING_VAL: 
+                    ksum[imo] = ksum[imo]+1
+            kstns = k
+            jsum[imo] = ksum[imo]*1
+                        
+            if ksum[imo] < params.minpair:
+                print " Total less than minpair: ",coop_id1,1900+(imo/12),1+(imo%12)
+                lowtoo[imo] = 1
+                
+    # If we have more neighbors than necessary, then let's see if we can adjust
+    # the numbers somewhat to bolster the amount of data in low-info periods,
+    # being careful not too delete other good data.
+    jstns = kstns*1
+    if kstns > params.numcorr-1:
+        
+        good_corrs.reverse()
+        for (k, coop_id2) in zip(xrange(len(good_corrs)), good_corrs):
+            
+            iremove = 1
+            npair = 0
+            neighb = series[coop_id2]
+            neighb_data = neighb.monthly_series
+            
+            imonths = xrange(nmonths)
+            CMISS, NMISS = MISS, neighb.MISSING_VAL
+            
+            iter_head = zip(imonths, cand_data, neighb_data)
+            for (imo, c, n) in [(imo, c, n) for (imo, c, n) in iter_head]:
+                if (c != CMISS) and (n != NMISS):
+                    npair = npair+1
+                    if ksum[imo] <= params.minpair:
+                        print " Cannot remove:", coop_id1,'-',coop_id2,1900+(imo/12),1+(imo%12),ksum[imo],lowtoo[imo]
+                        iremove = 0
+                        break
+                
+            if iremove == 1:
+                if kstns >= params.numcorr-1:
+                    print " Remove:",coop_id1,"-",coop_id2,npair,corr_dict[coop_id2]
+                    kstns = kstns-1
+                    for imo in xrange(nmonths):
+                        if cand_data[imo]!=CMISS and neighb_data[imo]!=NMISS:
+                            ksum[imo] = ksum[imo]-1
+        
+    for imo in xrange(nmonths):
+        if jsum[imo]>0:
+            print "Original-Final:",coop_id1,1900+(imo/12),1+(imo%12),jsum[imo],ksum[imo]
     
-    # Sort the correlations into a list in order of decreasing correlation.
-    sorted_corr = sorted(corr_dict.iteritems(),
-                         key=itemgetter(1),
-                         reverse=True)[:params.numcorr]
-    all_corrs[coop_id1] = sorted_corr
+    print "Original-Final Number stns:",coop_id1,jstns,kstns
+                    
+    all_corrs[coop_id1] = dict(corr=corr_dict)
 
 # Write a correlation output file. The actual correlations between stations
 # matches *perfectly* those computed with the ushcn_corr_2004.v3 code. However,
 # there are still issues with Fortran array pointers since I don't use any here
 # and I don't bother to pad the output file with bogus stations and correlations
 # if there are less than we hoped to find.
-print "...Assembling neighborhood correlation file"
+print "...Assembling neighborhood correlation file\n"
 corr_out = open("corr_out", 'wb')
 for sta_id in test_stations:
-    sorted_neighbors = sorted(all_corrs[sta_id],
-                              key=itemgetter(1), reverse=True)
+    correlations = all_corrs[sta_id]['corr']
+    sorted_neighbors = sorted(correlations.iteritems(),
+                              key=itemgetter(1), reverse=True)[:params.numcorr-1]
     ids, corrs = zip(*sorted_neighbors)
     id_str = ("%6s " % sta_id)+"".join(("%6s " % id for id in ids))+"\n"
     ptr_str = ("{0: >6d} ".format(test_stations.index(sta_id)+1))+"".join(("{0: >6d} ".format(test_stations.index(id)+1) for id in ids))+"\n"
     corr_str = ("  1.00 ")+"".join(("{0: >6.2f} ".format(c) for c in corrs))+"\n"
     
     corr_out.writelines((id_str, ptr_str, corr_str))
+    
+    print sta_id, len(all_neighbors[sta_id])+1, len(corrs)+1
 corr_out.close()
 
 ##########################################################################

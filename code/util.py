@@ -86,10 +86,12 @@ def compute_corr(x, y, missing_val=-9999, valid=False):
     n = len(x)
     assert len(y) == n # Computation assumes len(x_valid) == len(y_valid)
     
-    ## If there were fewer than 2 valid datavalues in each set, then we can't
+    ## If there were fewer than 2 valid data values in each set, then we can't
     ## compute the standard deviation and therefore can't compute the
-    ## correlation coefficient.
-    if n < 2:
+    ## correlation coefficient. The USHCN code has a higher threshold, and
+    ## further requires that there actually be 8 months of overlap for stations
+    ## to be correlated as pairs. We'll use that higher threshold here.
+    if n < 8:
         return None
         
     ## Now, there are no missing data in x_valid or y_valid, so we can pass

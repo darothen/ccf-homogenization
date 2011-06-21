@@ -163,7 +163,7 @@ class Series(object):
     def series(self):
         """Get the actual data contained in this series."""
         return self._series
-    
+        
     @property 
     def __len__(self):
         """The length of the series data contained in this object."""
@@ -197,6 +197,7 @@ class Series(object):
         """Set the actual data series in this object."""
         self._years = list(years)
         self._series = list(series)
+        self._monthly = self._flatten_months(series)
         
     @property
     def years(self):
@@ -208,7 +209,7 @@ class Series(object):
     def monthly_series(self):
         """Returns a flattened, monthly list of the data values in this object,
         of length len(years)*12 as opposed to len(years)."""
-        return self._flatten_months(self._series)
+        return self._monthly
     
     def _flatten_months(self, l):
         """Flattens and extracts a timeseries of monthly datavalues from a
