@@ -80,9 +80,15 @@ def compute_corr(x, y, missing_val=-9999, valid=False):
         equal amounts of valid data (more than 0); otherwise, returns None.
     
     """
-    #nox, noy = len(x), len(y)
-    x = get_valid_data(x, missing_val)
-    y = get_valid_data(y, missing_val)
+    ## Align x and y so that we are computing correlations only where
+    ## both x[i] and y[i] are valid data. This will also eliminate all the
+    ## missing values in the end x and y lists, so we can pass the "valid"
+    ## argument on to later computations.
+    if not valid:
+        aligned_zip = [(xi, yi) for xi, yi in zip(x, y) if ((xi != missing_val) and 
+                                                        (yi != missing_val))]
+        x, y = zip(*aligned_zip)
+    
     n = len(x)
     assert len(y) == n # Computation assumes len(x_valid) == len(y_valid)
     
@@ -91,7 +97,7 @@ def compute_corr(x, y, missing_val=-9999, valid=False):
     ## correlation coefficient. The USHCN code has a higher threshold, and
     ## further requires that there actually be 8 months of overlap for stations
     ## to be correlated as pairs. We'll use that higher threshold here.
-    if n < 8:
+    if n < 2:
         return None
         
     ## Now, there are no missing data in x_valid or y_valid, so we can pass

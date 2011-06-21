@@ -216,6 +216,7 @@ def read_ushcn_dataset_string(data_str):
         id will be a 6-digit string, variable and year will be integers, monthly
         will be a 12-element list of floats, and annual will be a float.
         
+    TODO: Flag to keep/discard values according to associated flags.
     """
     data_str = data_str.strip()
     data_bits = data_str.split()
@@ -350,6 +351,7 @@ class ArgumentError(Exception):
     :Ivar proper:
         (optional) A list of acceptable values for 'key'.
     
+    TODO: error_str = "%r is an invalid value for %s" % (self.val, self.key)
     """
     def __init__(self, key, val, proper=None):
         self.key = key

@@ -239,6 +239,7 @@ for coop_id1 in station_ids:
     # If we have more neighbors than necessary, then let's see if we can adjust
     # the numbers somewhat to bolster the amount of data in low-info periods,
     # being careful not too delete other good data.
+    useful_neighbors = [n for n in good_corrs]
     jstns = kstns*1
     if kstns > params.numcorr-1:
         
@@ -266,6 +267,7 @@ for coop_id1 in station_ids:
                 if kstns >= params.numcorr-1:
                     print " Remove:",coop_id1,"-",coop_id2,npair,corr_dict[coop_id2]
                     kstns = kstns-1
+                    useful_neighbors.remove(coop_id2)
                     for imo in xrange(nmonths):
                         if cand_data[imo]!=CMISS and neighb_data[imo]!=NMISS:
                             ksum[imo] = ksum[imo]-1
@@ -275,7 +277,13 @@ for coop_id1 in station_ids:
             print "Original-Final:",coop_id1,1900+(imo/12),1+(imo%12),jsum[imo],ksum[imo]
     
     print "Original-Final Number stns:",coop_id1,jstns,kstns
-                    
+    
+    # Now, we know which neighbors a) are highly correlated with this station,
+    # and b) add information where it is scarce in the temperature record.
+    for coop_id2 in corr_dict.keys():
+        if not coop_id2 in useful_neighbors:
+            del corr_dict[coop_id2]
+                
     all_corrs[coop_id1] = dict(corr=corr_dict)
 
 # Write a correlation output file. The actual correlations between stations
@@ -288,15 +296,21 @@ corr_out = open("corr_out", 'wb')
 for sta_id in test_stations:
     correlations = all_corrs[sta_id]['corr']
     sorted_neighbors = sorted(correlations.iteritems(),
+#    sorted_neighbors = sorted(correlations,
                               key=itemgetter(1), reverse=True)[:params.numcorr-1]
+    # PAD PAD PAD
+    ## Just pad the output with '000000' stations, r = 0.0 to make it look
+    ## like the normal output.
+    while len(sorted_neighbors) < params.numcorr-1:
+        sorted_neighbors.append(('000000', 0.0))
     ids, corrs = zip(*sorted_neighbors)
     id_str = ("%6s " % sta_id)+"".join(("%6s " % id for id in ids))+"\n"
-    ptr_str = ("{0: >6d} ".format(test_stations.index(sta_id)+1))+"".join(("{0: >6d} ".format(test_stations.index(id)+1) for id in ids))+"\n"
+    #ptr_str = ("{0: >6d} ".format(test_stations.index(sta_id)+1))+"".join(("{0: >6d} ".format(test_stations.index(id)+1) for id in ids))+"\n"
     corr_str = ("  1.00 ")+"".join(("{0: >6.2f} ".format(c) for c in corrs))+"\n"
     
-    corr_out.writelines((id_str, ptr_str, corr_str))
+    #corr_out.writelines((id_str, ptr_str, corr_str))
+    corr_out.writelines((id_str, corr_str))
     
-    print sta_id, len(all_neighbors[sta_id])+1, len(corrs)+1
 corr_out.close()
 
 ##########################################################################

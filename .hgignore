@@ -5,16 +5,23 @@ syntax: glob
 *.for
 *.pyc 
 bin/*
+*.v3
 
 # editor files
 *~
 .project
 .pydevproject
 
-# outputfiles
+# outputfiles, datafiles
 *.log
 *.52d
 *.compress
+*.max
+*.raw
+*.gz
+import/2011-06-06/USHCN_v52d/src_codes/*
 
-# other
-#*.daily
+
+# other - logs, etc
+*.daily
+*test

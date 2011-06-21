@@ -27,8 +27,8 @@ class TimeseriesMathChecks(unittest.TestCase):
     
     def testDataset1(self):
         """Dataset with one missing value"""
-        anomalies = compute_monthly_anomalies(self.dataset1, -9999.)
-        self.assertEquals(anomalies, [-20, -10, -9999, 10, 20])
+        #anomalies = compute_monthly_anomalies(self.dataset1, -9999.)
+        #self.assertEquals(anomalies, [-20, -10, -9999, 10, 20])
         
         mean = compute_mean(self.dataset1, -9999)
         self.assertEquals(mean, 40.0)
@@ -38,8 +38,8 @@ class TimeseriesMathChecks(unittest.TestCase):
         
     def testDataset2(self):
         """Dataset with no missing values"""
-        anomalies = compute_monthly_anomalies(self.dataset2, -9999.)
-        self.assertEquals(anomalies, [-25, -15, -5, 5, 15, 25])
+        #anomalies = compute_monthly_anomalies(self.dataset2, -9999.)
+        #self.assertEquals(anomalies, [-25, -15, -5, 5, 15, 25])
         
         mean = compute_mean(self.dataset2, -9999)
         self.assertEquals(mean, 45.0)
@@ -49,8 +49,8 @@ class TimeseriesMathChecks(unittest.TestCase):
         
     def testDataset3(self):
         """Dataset with only missing values"""
-        anomalies = compute_monthly_anomalies(self.dataset3, -9999.)
-        self.assertEquals(anomalies, [-9999, -9999, -9999, -9999])
+        #anomalies = compute_monthly_anomalies(self.dataset3, -9999.)
+        #self.assertEquals(anomalies, [-9999, -9999, -9999, -9999])
         
         mean = compute_mean(self.dataset3, -9999)
         self.assertEquals(mean, -9999)
@@ -96,6 +96,13 @@ class TimeseriesMathChecks(unittest.TestCase):
         y = [1+1e9, 1+1e9, 1+1e9]
         self.assertRaises(ZeroDivisionError, compute_corr, x, y, valid=True)
         
+    def testCorrelation6(self):
+        x1, x2 = [1,2,-9999,4,5], [1,4,5]
+        y1, y2 = [1,-9999,3,5,4], [1,5,4]
+        r1 = compute_corr(x1,y1,-9999)
+        r2 = compute_corr(x2,y2,-9999)
+        self.assertEquals(r1,r2)
+        
     def testStd1(self):
         """Shouldn't be able to compute std if less than 2 values"""
         miss = -9999
@@ -109,11 +116,6 @@ class TimeseriesMathChecks(unittest.TestCase):
         data = []
         std = compute_std(data, miss)
         self.assertEquals(std, miss)
-
-    
-    
-
-        
     
 
 class SphereMathChecks(unittest.TestCase):
