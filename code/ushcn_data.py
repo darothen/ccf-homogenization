@@ -244,9 +244,80 @@ class Series(object):
                 filled_series.append(missing_yearly)
         
         return filled_series, filled_years
+    
+class Network(object):
+    """USHCN Network of stations/associated data.
+    
+    A 'Network' instance is an object which holds meta-data for a specific
+    group of stations from the USHCN and their data, which a user would like
+    to homogenize. 
+    
+    :Ivar stations:
+        A dictionary of 'Station' objects, organized as follows:
+        stations = dict(station_a.coop_id=station_a,
+                        station_b.coop_id=station_b, ... )
+    :Ivar raw_series:
+        A dictionary of 'Series' objects, organized as follows:
+        raw_series = dict(series_a.coop_id=series_a,
+                          series_b.coop_id=series_b, ... )
+        
+    Both series and stations need to have the same set of keys; this will be
+    explicitly checked during construction.
+    
+    ...
+    
+    :Raises ValueError:
+        If stations and raw_series supplied to the constructor have a different
+        set of keys.
+                    
+    """
+    
+    def __init__(self, stations, raw_series, **k):
+        
+        # Check if stations and raw_series have the same set of keys
+        stations_ids = sorted(stations.keys())
+        series_ids = sorted(raw_series.keys())
+        if not (stations_ids == series_ids):
+            raise ValueError("'stations_ids' and 'series_ids' must have same keys!")
+                
+        self._stations = stations
+        self._raw_series = raw_series
+        
+        
+        self.__dict__.update(k)
+    
+    def __repr__(self):
+        
+        out_str = ""
+        if hasattr(self, "name"):
+            out_str = out_str + ("%s:\n    " % self.name)
+            
+        stations_list = self._stations.itervalues()
+        stations_str = ",\n    ".join(map(str, stations_list))
+        
+        return out_str + stations_str
+        
+    @property
+    def stations(self):
+        return self._stations
+    
+    @property
+    def raw_series(self):
+        return self._raw_series
+    
+    #######################
+    
+    def add_station(self, station):
+        self._series.append(station)
+        
+    def add_series(self, series):
+        self._series.append(series)
+        
+    def update_series(self, new_series):
+        self._raw_series = new_series
 
 class MissingDataError(Exception):
-    """Exception raised if a user trys to instantiate a Station or Series 
+    """Exception raised if a user tries to instantiate a Station or Series 
     object but fails to supply a necessary data field.
     
     :Ivar field:

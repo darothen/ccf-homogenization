@@ -12,13 +12,15 @@ into another workflow.
 """
 __docformat__ = "restructuredtext"
 
+import UserDict
+
 #: The following values are constants 
 
 #: The radius of the earth, in kilometers
 RADIUS_EARTH = 6371.0 
 
 
-class Parameters(object):
+class Parameters(dict):
     
     def __init__(self, **params):
         self.__dict__.update(params)
