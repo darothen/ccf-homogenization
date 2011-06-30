@@ -13,14 +13,13 @@ import random
 from operator import itemgetter
 
 import os
-
-import sys
+import copy
 
 # ccf-homogenization imports
 import ushcn_io
 from ushcn_data import Network
-from util import compute_arc_dist, compute_monthly_anomalies
-from util import compute_first_diff, compute_corr, compute_std
+from util import compute_monthly_anomalies, scale_series
+from util import diff, standardize, get_valid_data
 from mw2009.preprocess import find_neighborhood, neighborhood_strings
 from mw2009.preprocess import find_correlations
 import parameters
@@ -72,6 +71,10 @@ stations = dict(zip(station_ids, [all_stations[s] for s in station_ids]))
 
 series_list = [all_series[station] for station in station_ids]
 series = dict(zip([s.coop_id for s in series_list], series_list))
+
+##
+series_copy = copy.deepcopy(series)
+##
 
 n = Network(stations, series, name=params.project)
 print n
@@ -192,5 +195,230 @@ else:
 n.correlations = all_corrs
 
 ##########################################################################
+## BEGIN SPLITMERGE EXPERIMENTS ##
 
+hom_params = dict(nstns=params.nstns,
+                    numsrt=params.numsrt,
+                    numcorr=params.numcorr,
+                    begyr=params.begyr,
+                    endyr=params.endyr,
+                    data_src=params.data_src,
+                    variable=params.variable,
+                    stations=params.stations,
+                    project=params.project,
+                    ######################
+                    numyr=params.endyr-params.begyr,
+                    nmo=(params.endyr-params.begyr)*12,
+                    minser=5, # min number of ind. months in a raw series that can be tested
+                    minann=5, # min number of years for a given month
+                    slpmthmax=0.0225, # max slope (degrees/month) threshold for sloped models
+                    minlen=18, # min number of (months) for an estimate window
+                    mincomp=60, #
+                    compt=0.8, # if segment has more than minlen but less than mincomp,
+                               # then compt is % completeness needed for estimate
+                    minsta=2, # min number of station pairs for estimate eval
+                    minhits=2, # min num of sta-neigh series at the model decision phase
+                                # required to use interquartile estimate, else this is a 
+                                # linear (no chgpt) model with amp := 0.0
+                    homog=1,   # --
+                    indeter=2, # test statistics decisions by all of the techniques
+                    inhomog=3, # --
+                    ninh=80, # max number of breaks in the series
+                    inhnet=440, # max number of breaks in a network
+                    eps=1e-6, # a very small number
+                    stepthres=0.0, # a temperature step limit at which these models might work
+                )
+hom_params = parameters.Parameters(**hom_params)
 
+id1 = "215615"
+id2 = "215887"
+
+minann = 5
+begyr, endyr = hom_params.begyr, hom_params.endyr
+numyr = endyr-begyr
+
+def imo2iym(imo, begyr=1900):
+    y = begyr+(imo/12)
+    m = 1+(imo%12)
+    return y, m
+
+for s in series_copy.itervalues():
+    data = s.series
+    scaled = scale_series(data, 0.1, s.MISSING_VAL)
+    anomalies = compute_monthly_anomalies(scaled, s.MISSING_VAL)
+    s.set_series(anomalies, s.years)
+
+## FIND FIRST MONTH WHERE BOTH HAVE DATA
+station1 = n.stations[id1]
+series1 = series_copy[id1]
+
+data1 = series1.monthly_series
+        
+station2 = n.stations[id2]
+series2 = series_copy[id2]
+
+data2 = series2.monthly_series
+
+###        
+diff_data = diff(data1, data2)
+
+MISS = series1.MISSING_VAL
+
+## First pass through the data to find where the major "good" segment
+## is. Also, will create the paired-difference series
+nmo = hom_params.nmo
+first = 0
+first_set = False
+last = 0
+for (i, d1, d2) in zip(xrange(nmo), data1, data2):
+    if d1!=MISS and d2!=MISS:
+        if first < 12:
+            first = i
+            first_set = True
+        last = i
+inhoms = [first, last]
+        
+y1, m1 = imo2iym(first)
+y2, m2 = imo2iym(last)
+
+#####################################################################
+## Loop over the segments we have just found and apply the 
+## semihierarchical splitting algorithm and a 5% significance level
+## to find where there is a split.
+
+# first option, iopt = 1 = iTstat
+
+segment = diff_data[first:last+1]
+
+#z = standardize(diff_data, first, last, MISS)
+z = standardize(segment, 0, numyr, MISS)
+
+# subroutine snits - this is really just an application of the 
+# likelihood ratio test. For mechanics, see Alexandersson and Moberg 1997,
+# Int'l Jrnl of Climatology (pp 25-34)
+#ts = [MISS for d in diff_data[first:last+1]]
+ts = [MISS for d in segment]
+
+# TODO : refactor this into util.py. Getting heavy there; might consider
+# a package just for statistical tests in mw2009. 
+print "Begin SNIT...",
+'''
+iCount = 1
+for i in range(len(z)-1):
+    if z[i] != MISS:
+        
+        zmn1, zmn2 = 0.0, 0.0
+        n1, n2 = 0.0, 0.0
+        for j in range(i+1):
+            if z[j] != MISS:
+                zmn1 = zmn1 + z[j]
+                n1 = n1 + 1
+                
+        if n1 != 0:
+            zmn1 = zmn1/n1
+        else: 
+            break
+        
+        for j in range(i+1, len(z)):
+            if z[j] != MISS:
+                zmn2 = zmn2 + z[j]
+                n2 = n2 + 1
+        
+        if n2 != 0:
+            zmn2 = zmn2/n2
+        else:
+            break
+        
+        ts[i] = n1*(zmn1**2) + n2*(zmn2**2)
+        iCount = iCount + 1
+print "done!"
+'''
+
+### NOTE -
+# This is *really* counter-intuitive, and probably a bug in the original PHA
+# code. Truncating the right tail of the  
+
+iCount = 1
+mcnt = len(get_valid_data(z))
+#for pivot in range(len(z)-1):
+for pivot in range(mcnt-1):
+    if z[pivot] != MISS:
+        
+        left_series = get_valid_data(z[:pivot+1])
+        #right_series = get_valid_data(z[pivot+1:])
+        right_series = get_valid_data(z[pivot+1:mcnt])
+        
+        zmleft = sum(left_series)
+        nleft = len(left_series)
+        if nleft != 0:
+            zmleft = zmleft/nleft
+        else: 
+            break
+        
+        zmright = sum(right_series)
+        nright = len(right_series)
+        if nright != 0:
+            zmright = zmright/nright
+        else:
+            break
+        
+        ts[pivot] = nleft*(zmleft**2) + nright*(zmright**2)
+        iCount = iCount+1
+print "...done again!"
+        
+# Okay, we have likelihood ratios at each segment. Now, find the maximum
+# one and its index
+iPeak = 0
+rPeak = 0.0
+clip_ts = ts[2:-2] # We clip the beginning and end
+for (ind, ts_val) in zip(xrange(len(clip_ts)), clip_ts):
+    if ts_val > rPeak:
+        iPeak = ind
+        rPeak = ts_val
+# Now we find the critical value for this data, and check our max
+# likelihood ratio against it
+def t_lookup(num_vals):
+    '''alpha = 0.5
+    
+    Alexandersson and Moberg 1997,
+    Int'l Jrnl of Climatology (pp 25-34)
+    Appendix 2, Table AI
+    '''
+    sig95 = [4.54,5.70,6.95,7.65,8.10,8.45,8.65,8.80,8.95,9.05,
+             9.15,9.35,9.55,9.70]
+    nsig = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250]
+    
+    if num_vals < nsig[0]: 
+        return 99999.0 # Too few values!
+    elif num_vals >= nsig[-1]:
+        return sig95[-1] # This is a good approximation as n->infinity
+    else:
+        # Select the two values from nsig which bound num_vals
+        bounds = zip(nsig[:-1], nsig[1:])
+        bi = 0
+        l, r = bounds[bi]
+        while not (l <= num_vals <= r): 
+            bi = bi+1
+            l, r = bounds[bi]
+        left_ind, right_ind = nsig.index(l), nsig.index(r)
+        
+        # Estimate the critical value using linear interpolation between
+        # the two lookup values we found
+        bound_left, bound_right = l, r
+        t_left, t_right = sig95[left_ind], sig95[right_ind]
+        
+        interp = num_vals - bound_left
+        slope = (t_right - t_left) / (bound_right - bound_left)
+        
+        t_val = t_left + slope*interp
+        return t_val
+    
+crit_val = t_lookup(iCount)
+# Test the peak stat against the critical value
+curstat = rPeak
+new_end_mo = first + iPeak + 2 # shift by 2 aligns clip_ts with ts,
+                               # shift by first aligns it back to diff_data
+ynew, mnew = imo2iym(new_end_mo)
+# Fragment First if either homog or inhomog
+print "%6s-%6s MD       FIRST series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val)
+print z[0], ts[0]

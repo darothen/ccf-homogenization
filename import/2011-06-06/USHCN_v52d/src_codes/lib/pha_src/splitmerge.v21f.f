@@ -86,6 +86,10 @@ c          print *,' One of pair miss: ', imo
           rTraw(imo) = amiss  
         endif  
       enddo
+      !!!
+      !print *, rTraw(1), rrtemp(1,1), rrtemp(2,1)
+      !print *, rTraw(54), rrtemp(1,54), rrtemp(2,54)
+      !!!
       if(imob .eq. 0) then
         write(6,*)subnet(1),' Station has no data - skipping'
         goto 999
@@ -774,6 +778,11 @@ c         Do nothing - goto next segment
 c       standardize series for split/merge stats
         if(iscrit(iopt) .ne. iBstat) then
           call standard(qy,z,1,numx,nmo)
+          !!!
+          !open(654, FILE=subnet(1)//"-"//subnet(2)//".z")
+          !write(654,*) z
+          !close(654)
+          !!!
         else
 c         for estamt use full temperature series
           do ix = 1, numx
@@ -790,6 +799,16 @@ c          (iopt = 2) common for all of the split/merge calls (not indKW)
           if(iscrit(iopt) .eq. iTstat) then
 c           generate statistic (and series for chgpt) for max-likely
             call snits(kmo,z,ts,mknt)
+            !!!
+            !print *, "I just called snits"
+            !open(655, FILE=subnet(1)//"-"//subnet(2)//".ts")
+            !write(655,*) ts
+            !print *, kmo,z(1),ts(1),mknt
+            !print *, z(1:15)
+            !print *, ts(1:15)
+            !print *, rTraw(55)
+            !close(655)
+            !!!
             iqtype = 3  
           else if(iscrit(iopt) .eq. iFstat) then
 c           generate statistic (and series for chgpt) for 2-phase
@@ -1036,6 +1055,8 @@ c-----------------------------------------------------------------------
         endif    
       enddo
                 
+      print *, rMean, rSum, rNum, rVarSumm, rsqVar
+
       return
       end
 

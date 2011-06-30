@@ -482,8 +482,8 @@ c
 c     octpart.v5d 26apr04 - work around the 10 station limit for MM's
 c              subnets
 c
-c     octpart.v5c2 9apr04 - pairwise with no loops andex(id)+1) for id in ids))+"\n"
-    corr_str = ("  1.00 ")+"".join(("{0: >6.2f} ".format(c) for c in corrs))+d no SHAP
+c     octpart.v5c2 9apr04 - pairwise with no loops 
+c SHAP
 c
 c     octpart.v5b2 5apr04 - Pairwise with no loops
 c

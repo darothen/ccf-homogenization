@@ -60,7 +60,7 @@ dtag=`date +%y%m%d%H%M`
       
 logfile=$logdir/case7_bench.$dtag.log
 echo "CASE7_BENCH FULL UCP: $runid oproc:$oproc dtag:$dtag"
-nice $bin/$runid -Q 1.46 -S 18 -s 5 -P -o $oproc -d 1 -T 100 -l -e 3 \
+nice $bin/$runid -Q 1.46 -S 18 -s 5 -P -o $oproc -d 3 -T 100 -l -e 3 \
   -R -21 -p $iproc -q $iproc -c 0 -t 1 -n $corrfile -C $datadir $datadir \
   -r $mattdata -m $metafile -N $datadir $datadir -O . > $logfile
 
