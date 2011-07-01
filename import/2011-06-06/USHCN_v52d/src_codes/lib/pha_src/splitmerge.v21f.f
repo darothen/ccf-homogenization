@@ -796,7 +796,7 @@ c       see inhomog.comm.mthly.incl for ioption definitions
 c          MLRTest.v17g modification - make minbic offset estimation call 
 c          (iopt = 2) common for all of the split/merge calls (not indKW)
         if(ioptseg .gt. 0 .and. iscrit(iopt) .lt. iBstat) then
-          if(iscrit(iopt) .eq. iTstat) then
+          if(iscrit(iopt). eq. iTstat) then
 c           generate statistic (and series for chgpt) for max-likely
             call snits(kmo,z,ts,mknt)
             !!!
@@ -1055,7 +1055,7 @@ c-----------------------------------------------------------------------
         endif    
       enddo
                 
-      print *, rMean, rSum, rNum, rVarSumm, rsqVar
+      !print *, rMean, rSum, rNum, rVarSumm, rsqVar
 
       return
       end

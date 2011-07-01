@@ -18,34 +18,6 @@ from operator import itemgetter
 # ccf-homogenization imports
 from parameters import RADIUS_EARTH
 
-def diff(data1, data2, missing_val=-9999):
-    """Computes the difference series between data1 and data2.
-    
-    diff[i] = data1[i] - data2[i] if neither data1[i] or data2[i] are
-    equal to missing_val. If either one is, then diff[i] = missing_val.
-    
-    :Params data1, data2:
-        The two lists of data which will be differenced against each
-        other. Note that data1 and data2 must have the same length!
-    :Param missing_val:
-        The placeholder for missing values in the dataset.
-    :Return:
-        A list of data containing the difference series between data1
-        and data2, with the same length as data1 and data2.
-    
-    """
-    assert len(data1) == len(data2)
-    
-    diff_data = []
-    for (d1, d2) in zip(data1, data2):
-        if d1 != missing_val and d2 != missing_val:
-            append_val = (d1-d2)
-        else:
-            append_val = missing_val
-        diff_data.append(append_val)
-        
-    return diff_data
-
 
 def get_valid_data(data, missing_val=-9999):
     """Return only the valid values in a dataset.
@@ -362,59 +334,6 @@ def compute_arc_dist(station1=None, station2=None,
     
     return arc_dist
     
-def standardize(data, left, right, missing_val=-9999):
-    """Standardize a subset of data using a normal score.
-    
-    Computes the normal score for a set of data necessary for performing
-    the standard normal homogenity test. The normal scores are defined as
-    
-    Z_i = (Q_i - Qbar) / sigma_Q,
-    
-    For more information, please refer to Alexandersson and Moberg, 1997,
-    Int'l Journal of Climatology Vol. 17, pp 25-34.    
-    
-    This is a direct port of splitmerge.v21f.f > subroutine 'standard'.
-    
-    :Param data:
-        The dataset to standardize.
-    :Params left, right: 
-        The bounding indices to use for while computing the standardized
-        reference values.
-    :Param missing_val:
-        The placeholder for missing data.
-    :Return:
-        A list of length (right-left), with the standardized reference 
-        values computed here.
-    
-    """
-    
-    ## Find the valid data to use to compute the mean, etc.
-    #valid_data = get_valid_data(data[left:right+1], missing_val)
-    valid_data = get_valid_data(data, missing_val)
-    rNum = len(valid_data)
-    rMean = compute_mean(valid_data, valid=True)
-    rSum = sum(valid_data)
-
-    ## Compute the sum the squared error for each term
-    rVarSumm = 0.0
-    for d in valid_data:
-        rVarSumm = rVarSumm + (d-rMean)**2
-
-    ## The standard deviation is the root of the TSE
-    rsqVar = sqrt(rVarSumm/(rNum-2))
-    
-    ## Normalize each data value using this standard deviation
-    rStd = []
-    #for d in data[left:right+1]:
-    for d in data:
-        if d!= missing_val:
-            rStd.append((d-rMean)/rsqVar)
-        else:
-            rStd.append(missing_val)
-            
-    print rMean, rSum, rNum, rVarSumm, rsqVar
-            
-    return rStd
 
         
     

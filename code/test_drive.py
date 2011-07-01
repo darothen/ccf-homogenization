@@ -18,10 +18,13 @@ import copy
 # ccf-homogenization imports
 import ushcn_io
 from ushcn_data import Network
-from util import compute_monthly_anomalies, scale_series
-from util import diff, standardize, get_valid_data
+from util import compute_monthly_anomalies, scale_series, get_valid_data
+
 from mw2009.preprocess import find_neighborhood, neighborhood_strings
 from mw2009.preprocess import find_correlations
+
+from mw2009.splitmerge import diff, standardize, lrt_lookup, snht
+
 import parameters
 
 # A sample network of 52 stations. Started with a selection of literally
@@ -281,144 +284,129 @@ inhoms = [first, last]
 y1, m1 = imo2iym(first)
 y2, m2 = imo2iym(last)
 
-#####################################################################
-## Loop over the segments we have just found and apply the 
-## semihierarchical splitting algorithm and a 5% significance level
-## to find where there is a split.
+breakpoints = []
+breakpoints.extend(inhoms)
 
-# first option, iopt = 1 = iTstat
+for iter in range(4):
+    
+    #print map(imo2iym, breakpoints) 
+    
+    seg_bounds = zip(breakpoints[:-1], breakpoints[1:])
 
-segment = diff_data[first:last+1]
+    print "Parse segments (isplit = 1), ipass: ", iter
 
-#z = standardize(diff_data, first, last, MISS)
-z = standardize(segment, 0, numyr, MISS)
-
-# subroutine snits - this is really just an application of the 
-# likelihood ratio test. For mechanics, see Alexandersson and Moberg 1997,
-# Int'l Jrnl of Climatology (pp 25-34)
-#ts = [MISS for d in diff_data[first:last+1]]
-ts = [MISS for d in segment]
-
-# TODO : refactor this into util.py. Getting heavy there; might consider
-# a package just for statistical tests in mw2009. 
-print "Begin SNIT...",
-'''
-iCount = 1
-for i in range(len(z)-1):
-    if z[i] != MISS:
+    int_breaks = [] # [(month, test_stat, num_vals)...]
+                    
+    for (l, r) in seg_bounds:
         
-        zmn1, zmn2 = 0.0, 0.0
-        n1, n2 = 0.0, 0.0
-        for j in range(i+1):
-            if z[j] != MISS:
-                zmn1 = zmn1 + z[j]
-                n1 = n1 + 1
+    #####################################################################
+    ## Loop over the segments we have just found and apply the 
+    ## semihierarchical splitting algorithm and a 5% significance level
+    ## to find where there is a split.
+        y1, m1 = imo2iym(l)
+        y2, m2 = imo2iym(r)
+
+        segment = diff_data[l:r+1]
+        numyr = r-l
+        
+        z = standardize(segment, MISS)
+        
+        # subroutine snits - this is really just an application of the 
+        # likelihood ratio test. For mechanics, see Alexandersson and Moberg 1997,
+        # Int'l Jrnl of Climatology (pp 25-34)
+        ts = snht(z, MISS, standardized=True)
+        z_count = len(get_valid_data(z))
                 
-        if n1 != 0:
-            zmn1 = zmn1/n1
-        else: 
-            break
-        
-        for j in range(i+1, len(z)):
-            if z[j] != MISS:
-                zmn2 = zmn2 + z[j]
-                n2 = n2 + 1
-        
-        if n2 != 0:
-            zmn2 = zmn2/n2
+        # Okay, we have likelihood ratios at each segment. Now, find the maximum
+        # one and its index
+        iPeak = 0
+        rPeak = 0.0
+        clip_ts = ts[2:-2] # We clip the beginning and end
+        for (ind, ts_val) in zip(xrange(len(clip_ts)), clip_ts):
+            if ts_val > rPeak:
+                iPeak = ind
+                rPeak = ts_val
+        # Now we find the critical value for this data, and check our max
+        # likelihood ratio against it
+        crit_val = lrt_lookup(z_count)
+        # Test the peak stat against the critical value
+        curstat = rPeak
+        new_end_mo = l + iPeak + 2 # shift by 2 aligns clip_ts with ts,
+                                       # shift by first aligns it back to diff_data
+        ynew, mnew = imo2iym(new_end_mo)
+        # Fragment First if either homog or inhomog
+        if iter == 0: # first time through loop
+            print "%6s-%6s MD        FIRST series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val)
+            breakpoints.append(new_end_mo)
+            int_breaks.append((new_end_mo, curstat, z_count))
         else:
-            break
+            if curstat > crit_val:
+                print "%6s-%6s MD Inhomogenity for series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val)
+                breakpoints.append(new_end_mo)
+                int_breaks.append((new_end_mo, curstat, z_count))
+                
+            else:
+                print "%6s-%6s MD      Homogeneous series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val)
+                breakpoints.remove(r)
+                int_breaks.append((r, curstat, z_count))
+                
+  
+    breakpoints = sorted(breakpoints)
+    int_breaks = sorted(int_breaks, key=itemgetter(0))
         
-        ts[i] = n1*(zmn1**2) + n2*(zmn2**2)
-        iCount = iCount + 1
-print "done!"
-'''
+    # So we have new segments that can be generated from these new
+    # breakpoints. Now, the PHA routine enters a "merge" process
+    # to see whether or not to keep these newly found changepoints or throw
+    # them out as false alarms. The basis of this is whether or not the 
+    # test statistic we found from the likelihood ratio test is significant
+    # or not. Now, we will double check them, and if it is not significant,
+    # we will remove that breakpoint and reapeat the splitting process.
+    if iter > 0:
+        
+        print "Merge segments (isplit = 0), ipass: ", iter
+        
+        # An annoying thing here is that we will need to find potential breakpoints 
+        # between the new ones we found. Let's get that out of the way:
+        newest_breakpoints, curstats, nums_vals = zip(*int_breaks)
+        seg_bounds = zip(newest_breakpoints[:-1], newest_breakpoints[1:])
+        for (l, r) in seg_bounds:
+            print imo2iym(l), imo2iym(r)
+            segment = diff_data[l:r+1]
+            z = standardize(segment, MISS)
+            ts = snht(z, MISS, standardized=True)
+            z_count = len(get_valid_data(z))
+                
+            iPeak = 0.0
+            rPeak = 0.0
+            clip_ts = ts[2:-2] # We clip the beginning and end
+            for (ind, ts_val) in zip(xrange(len(clip_ts)), clip_ts):
+                if ts_val > rPeak:
+                    iPeak = ind
+                    rPeak = ts_val
+            crit_val = lrt_lookup(z_count)
+            curstat = rPeak
+            new_end_mo = l + iPeak + 2
+            int_breaks.append((new_end_mo, curstat, z_count))
+            
+        int_breaks = sorted(int_breaks, key=itemgetter(0))
+        
+        ## it's possible that an endpoint was used because a homogenous series
+        ## was found initially. If any of these are here, we need to get rid of
+        ## them.
+        newest_breakpoints, curstats, nums_vals = zip(*int_breaks)
+        for (ind, bp) in zip(xrange(len(newest_breakpoints)), newest_breakpoints):
+            if bp in [breakpoints[-1]]:
+                del int_breaks[ind]
+                #pass
+            
+        for (mo, curstat, num_vals) in int_breaks:
+            iy, im = imo2iym(mo)
+            crit_val = lrt_lookup(num_vals)
+            
+            if curstat > crit_val:
+                print "%6s-%6s MD  Peak kept in merge at %4d %2d | ts: %4.2f limit >: %3.2f" % (id1,id2,iy,im,curstat,crit_val)
+            else:
+                print "%6s-%6s MD Compress 2 out peak at %4d %2d | ts: %4.2f limit >: %3.2f" % (id1,id2,iy,im,curstat,crit_val)
 
-### NOTE -
-# This is *really* counter-intuitive, and probably a bug in the original PHA
-# code. Truncating the right tail of the  
+    #print "at the end of iter %d, the breaks are: " % iter, map(imo2iym, breakpoints)
 
-iCount = 1
-mcnt = len(get_valid_data(z))
-#for pivot in range(len(z)-1):
-for pivot in range(mcnt-1):
-    if z[pivot] != MISS:
-        
-        left_series = get_valid_data(z[:pivot+1])
-        #right_series = get_valid_data(z[pivot+1:])
-        right_series = get_valid_data(z[pivot+1:mcnt])
-        
-        zmleft = sum(left_series)
-        nleft = len(left_series)
-        if nleft != 0:
-            zmleft = zmleft/nleft
-        else: 
-            break
-        
-        zmright = sum(right_series)
-        nright = len(right_series)
-        if nright != 0:
-            zmright = zmright/nright
-        else:
-            break
-        
-        ts[pivot] = nleft*(zmleft**2) + nright*(zmright**2)
-        iCount = iCount+1
-print "...done again!"
-        
-# Okay, we have likelihood ratios at each segment. Now, find the maximum
-# one and its index
-iPeak = 0
-rPeak = 0.0
-clip_ts = ts[2:-2] # We clip the beginning and end
-for (ind, ts_val) in zip(xrange(len(clip_ts)), clip_ts):
-    if ts_val > rPeak:
-        iPeak = ind
-        rPeak = ts_val
-# Now we find the critical value for this data, and check our max
-# likelihood ratio against it
-def t_lookup(num_vals):
-    '''alpha = 0.5
-    
-    Alexandersson and Moberg 1997,
-    Int'l Jrnl of Climatology (pp 25-34)
-    Appendix 2, Table AI
-    '''
-    sig95 = [4.54,5.70,6.95,7.65,8.10,8.45,8.65,8.80,8.95,9.05,
-             9.15,9.35,9.55,9.70]
-    nsig = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 250]
-    
-    if num_vals < nsig[0]: 
-        return 99999.0 # Too few values!
-    elif num_vals >= nsig[-1]:
-        return sig95[-1] # This is a good approximation as n->infinity
-    else:
-        # Select the two values from nsig which bound num_vals
-        bounds = zip(nsig[:-1], nsig[1:])
-        bi = 0
-        l, r = bounds[bi]
-        while not (l <= num_vals <= r): 
-            bi = bi+1
-            l, r = bounds[bi]
-        left_ind, right_ind = nsig.index(l), nsig.index(r)
-        
-        # Estimate the critical value using linear interpolation between
-        # the two lookup values we found
-        bound_left, bound_right = l, r
-        t_left, t_right = sig95[left_ind], sig95[right_ind]
-        
-        interp = num_vals - bound_left
-        slope = (t_right - t_left) / (bound_right - bound_left)
-        
-        t_val = t_left + slope*interp
-        return t_val
-    
-crit_val = t_lookup(iCount)
-# Test the peak stat against the critical value
-curstat = rPeak
-new_end_mo = first + iPeak + 2 # shift by 2 aligns clip_ts with ts,
-                               # shift by first aligns it back to diff_data
-ynew, mnew = imo2iym(new_end_mo)
-# Fragment First if either homog or inhomog
-print "%6s-%6s MD       FIRST series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val)
-print z[0], ts[0]
