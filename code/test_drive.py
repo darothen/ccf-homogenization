@@ -233,8 +233,8 @@ hom_params = dict(nstns=params.nstns,
                 )
 hom_params = parameters.Parameters(**hom_params)
 
-id1 = "215615"
-id2 = "215887"
+id1 = "215887"
+id2 = "116738"
 
 minann = 5
 begyr, endyr = hom_params.begyr, hom_params.endyr
@@ -244,6 +244,12 @@ def imo2iym(imo, begyr=1900):
     y = begyr+(imo/12)
     m = 1+(imo%12)
     return y, m
+    
+def within(test_interval, cover):
+    
+    test_l, test_r = test_interval
+    cover_l, cover_r = cover
+    return (cover_l <= test_l <= test_r <= cover_r)
 
 for s in series_copy.itervalues():
     data = s.series
@@ -286,19 +292,30 @@ y2, m2 = imo2iym(last)
 
 breakpoints = []
 breakpoints.extend(inhoms)
+homog_segs = []
 
-for iter in range(4):
+iter = 0
+enter_BIC = False
+last_breakpoints = []
+while (iter < 10) and not enter_BIC:
     
     #print map(imo2iym, breakpoints) 
     
     seg_bounds = zip(breakpoints[:-1], breakpoints[1:])
+    last_breakpoints = copy.deepcopy(breakpoints)
+    new_breakpoints = copy.deepcopy(breakpoints)
+        
+    seg_lookup = []
+    
+    new_homog_segs = []
+
+    new_test_segs = []
 
     print "Parse segments (isplit = 1), ipass: ", iter
-
-    int_breaks = [] # [(month, test_stat, num_vals)...]
-                    
+    print breakpoints
+    print seg_bounds
     for (l, r) in seg_bounds:
-        
+                
     #####################################################################
     ## Loop over the segments we have just found and apply the 
     ## semihierarchical splitting algorithm and a 5% significance level
@@ -306,8 +323,25 @@ for iter in range(4):
         y1, m1 = imo2iym(l)
         y2, m2 = imo2iym(r)
 
-        segment = diff_data[l:r+1]
+        adjust = int(seg_bounds.index((l,r)) > 0)
+        segment = diff_data[l+adjust:r+1]
         numyr = r-l
+        
+        # short circuit and skip if it's too short
+        if (r-l) <= 5:
+            print "Too short: ", imo2iym(l), imo2iym(r)
+            continue
+        
+        # short circuit and skip this segment if we already know that it's
+        # homogenous
+        this_within = lambda seg: within((l, r), seg)
+        within_stable_segs = map(this_within, homog_segs)
+        if any(within_stable_segs):
+            print "Stable segment: ", imo2iym(l), imo2iym(r)
+            if l == first: 
+                new_breakpoints.append(first)
+            seg_lookup.append(((l, r), 'stable'))
+            continue
         
         z = standardize(segment, MISS)
         
@@ -331,29 +365,49 @@ for iter in range(4):
         crit_val = lrt_lookup(z_count)
         # Test the peak stat against the critical value
         curstat = rPeak
-        new_end_mo = l + iPeak + 2 # shift by 2 aligns clip_ts with ts,
-                                       # shift by first aligns it back to diff_data
+        new_end_mo = l + iPeak + 2 + adjust # shift by 2 aligns clip_ts with ts,
+                                            # shift by first aligns it back to diff_data
+                                            # shift by adjust aligns it back with the diff_data
         ynew, mnew = imo2iym(new_end_mo)
         # Fragment First if either homog or inhomog
         if iter == 0: # first time through loop
             print "%6s-%6s MD        FIRST series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val)
             breakpoints.append(new_end_mo)
-            int_breaks.append((new_end_mo, curstat, z_count))
+            breakpoints = sorted(breakpoints)
+            seg_status = 'first'
+            
         else:
             if curstat > crit_val:
-                print "%6s-%6s MD Inhomogenity for series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val)
-                breakpoints.append(new_end_mo)
-                int_breaks.append((new_end_mo, curstat, z_count))
-                
+                print "%6s-%6s MD Inhomogenity for series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f %4d" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val,z_count)
+                new_breakpoints.append(new_end_mo)
+                #seg_status = 'inhomog'
+                #seg_lookup.append(((l, r), 'inhomog', new_end_mo))
+                        
             else:
-                print "%6s-%6s MD      Homogeneous series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val)
-                breakpoints.remove(r)
-                int_breaks.append((r, curstat, z_count))
+                print "%6s-%6s MD      Homogeneous series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f %4d" % (id1,id2,y1,m1,y2,m2,ynew,mnew,curstat,crit_val,z_count)
+                #seg_lookup.append(((l, r), 'homog'))
+                #seg_status = 'homog'
                 
-  
-    breakpoints = sorted(breakpoints)
-    int_breaks = sorted(int_breaks, key=itemgetter(0))
-        
+                new_homog_segs.append((l, r))
+                
+    # update our account of which segments were homogenous. We want to remember
+    # them during the next iteration. Also, condense stable segments if possible
+    # (i.e., two lie next to each other, replace them with the union of those
+    # two segments)
+    homog_segs.extend(new_homog_segs)
+    if homog_segs:
+        homog_segs = sorted(homog_segs, key=itemgetter(0))
+        final_homog_segs = [homog_segs[0], ] # this will be like a stack
+        for seg in homog_segs[1:]:
+            last_seg = final_homog_segs[-1]
+            if last_seg[1] == seg[0]:
+                new_seg = (last_seg[0], seg[1])
+                final_homog_segs.pop()
+                final_homog_segs.append(new_seg)
+            else:
+                final_homog_segs.append(seg)
+        homog_segs = final_homog_segs
+
     # So we have new segments that can be generated from these new
     # breakpoints. Now, the PHA routine enters a "merge" process
     # to see whether or not to keep these newly found changepoints or throw
@@ -361,17 +415,43 @@ for iter in range(4):
     # test statistic we found from the likelihood ratio test is significant
     # or not. Now, we will double check them, and if it is not significant,
     # we will remove that breakpoint and reapeat the splitting process.
+    new_breakpoints = sorted(new_breakpoints)
+    print new_breakpoints
+    seg_bounds = zip(new_breakpoints[:-2], new_breakpoints[2:])
+    print seg_bounds
+    
+    remove_breakpoints = set()
+    add_breakpoints = set()
+    merged_breakpoints = set()
     if iter > 0:
+        
+        collapse_segs = []
         
         print "Merge segments (isplit = 0), ipass: ", iter
         
         # An annoying thing here is that we will need to find potential breakpoints 
         # between the new ones we found. Let's get that out of the way:
-        newest_breakpoints, curstats, nums_vals = zip(*int_breaks)
-        seg_bounds = zip(newest_breakpoints[:-1], newest_breakpoints[1:])
-        for (l, r) in seg_bounds:
+        #seg_bounds = merge_breakpoints
+        
+        #for (l, r) in seg_bounds:
+        for ((l ,r), new_bp) in zip(seg_bounds, new_breakpoints[1:-1]):
+            
             print imo2iym(l), imo2iym(r)
-            segment = diff_data[l:r+1]
+            
+            # short circuit and skip this segment if we already know that it's
+            # homogenous
+#            this_within = lambda seg: within((l, r), seg)
+#            within_stable_segs = map(this_within, homog_segs)
+#            if any(within_stable_segs):
+#                print "Stable segment: ", imo2iym(l), imo2iym(r)
+#                if l == first: 
+#                    new_breakpoints.append(first)
+#                seg_lookup.append(((l, r), 'stable'))
+#                continue
+            
+            adjust = int(seg_bounds.index((l, r)) > 0)
+            segment = diff_data[l+adjust:r+1]
+            
             z = standardize(segment, MISS)
             ts = snht(z, MISS, standardized=True)
             z_count = len(get_valid_data(z))
@@ -385,28 +465,38 @@ for iter in range(4):
                     rPeak = ts_val
             crit_val = lrt_lookup(z_count)
             curstat = rPeak
-            new_end_mo = l + iPeak + 2
-            int_breaks.append((new_end_mo, curstat, z_count))
+            new_end_mo = l + iPeak + 2 + adjust
             
-        int_breaks = sorted(int_breaks, key=itemgetter(0))
-        
-        ## it's possible that an endpoint was used because a homogenous series
-        ## was found initially. If any of these are here, we need to get rid of
-        ## them.
-        newest_breakpoints, curstats, nums_vals = zip(*int_breaks)
-        for (ind, bp) in zip(xrange(len(newest_breakpoints)), newest_breakpoints):
-            if bp in [breakpoints[-1]]:
-                del int_breaks[ind]
-                #pass
-            
-        for (mo, curstat, num_vals) in int_breaks:
-            iy, im = imo2iym(mo)
-            crit_val = lrt_lookup(num_vals)
+            iy, im = imo2iym(new_end_mo)
             
             if curstat > crit_val:
                 print "%6s-%6s MD  Peak kept in merge at %4d %2d | ts: %4.2f limit >: %3.2f" % (id1,id2,iy,im,curstat,crit_val)
+
+                merged_breakpoints.add(l)
+                merged_breakpoints.add(new_bp)
+                merged_breakpoints.add(r)
             else:
                 print "%6s-%6s MD Compress 2 out peak at %4d %2d | ts: %4.2f limit >: %3.2f" % (id1,id2,iy,im,curstat,crit_val)
+                # Crap, if there are any potential breakpoints in this segment,
+                # we need to remove them because this segment is homogenous. Let's
+                # remember this homogenous segment for now and come back once
+                # we've found all of them.
 
-    #print "at the end of iter %d, the breaks are: " % iter, map(imo2iym, breakpoints)
+                merged_breakpoints.update([l, r])
+                remove_breakpoints.add(new_bp)
+
+        merged_breakpoints.difference_update(remove_breakpoints)
+        breakpoints = list(merged_breakpoints)
+    breakpoints = sorted(breakpoints)
+    
+    enter_BIC =  (breakpoints == last_breakpoints)
+    iter = iter + 1
+    
+## Okay wow, we've potentially made it to the BIC stage now... !
+ym_breakpoints = map(imo2iym, breakpoints)
+print ym_breakpoints
+
+
+
+    
 

@@ -853,6 +853,8 @@ c             for merging, this is a change (collapse)
             else
 c             for parsing, this is NOT a change
               goto 800
+
+
             endif  
           endif  
      
@@ -882,6 +884,7 @@ c             in a merge pass, collapse a homog chgpt
               goto 200
             else  
 c             in a merge pass, leave an inhomog segment alone
+               write(6,*) iyr1, imth1, iyr2, imth2
               if(idebug .ge. 2) write(6,'(a, "-", a, " ",a,
      *          " Peak kept in merge at   ", i4, i3, " | ", 
      *          " ts: ", f7.2, a9, f6.2)')subnet(1), subnet(2),
@@ -893,17 +896,17 @@ c             in a merge pass, leave an inhomog segment alone
 c             in a split pass, leave a homog segment alone
               if(idebug .ge. 2) write(6,'(a, "-", a, " ", a, 
      *          "       Homogeneous series ", i4, i3, " to ", i4, i3,
-     *          " | at ", i4, i3, " ts: ", f7.2, a9, f6.2)')
+     *          " | at ", i4, i3, " ts: ", f7.2, a9, f6.2, i4)')
      *          subnet(1), subnet(2), otag, iyr1, imth1, iyr2,
-     *          imth2, iyrb, imthb, curstat, limsense, critval
+     *          imth2, iyrb, imthb, curstat, limsense, critval,mknt
               goto 800
             else
 c             in a split pass, fragment an inhomog segment
               if(idebug .ge. 2) write(6,'(a, "-", a, " ", a,
      *          " Inhomogeneity for series ", i4, i3, " to ", i4, i3, 
-     *          " | at ", i4, i3, " ts: ", f7.2, a9, f6.2)') 
+     *          " | at ", i4, i3, " ts: ", f7.2, a9, f6.2, i4)') 
      *          subnet(1), subnet(2), otag, iyr1, imth1, iyr2, 
-     *          imth2, iyrb, imthb, curstat, limsense, critval
+     *          imth2, iyrb, imthb, curstat, limsense, critval,mknt
               goto 300
             endif  
           endif  
