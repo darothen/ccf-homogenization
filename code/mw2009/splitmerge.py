@@ -158,10 +158,12 @@ def snht(data, missing_val=-9999, mcnt=None, standardized=False):
 
     pivot_count = range(mcnt-1)
     
-    ### NOTE -
-    # This is *really* counter-intuitive, and probably a bug in the original PHA
-    # code. Truncating the right tail of the  
-    
+    # BUG: This is *really* counter-intuitive, and probably a bug in the original 
+    #     PHA code. Here, and in the PHA code, we use mcnt to effectively truncate
+    #     the right tail of the data. The catch is, mcnt is hte number of 'valid'
+    #     data points - not *all* the data points. Because we end the right-seek
+    #     at mcnt, we end up missing some of the data on the far right hand side
+    #     of the array.
     for pivot in pivot_count:
         
         if data[pivot] != missing_val:

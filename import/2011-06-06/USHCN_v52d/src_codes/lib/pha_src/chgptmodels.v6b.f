@@ -121,7 +121,7 @@ c       2) The estimated intercept is within the series limits
       
       ifail = 0
       
-      ibdebug = 0
+      ibdebug = 3
 c      if(iopt .ge. 4) ibdebug = 2
       if(ibdebug .ge. 1) 
      *  print *,' CHGPTMODEL ingtype:',inqtype,' iopt:',iopt 
@@ -152,12 +152,13 @@ c     run full series as one segment (straight line)
       if(lsqopt .eq. 1) 
      *  call lsqline(nobs, aMiss, xseg, yseg, xmean, ymean, slope, 
      *    Yint, sseflat, sseslope, mknt)
-c      print *,nobs, xmean, ymean, slope, 
+c      print *,'lsqline', nobs, xmean, ymean, slope, 
 c     *  Yint, sseflat, sseslope, mknt
       call kthline(nobs, aMiss, xseg, yseg, xmed, ymed, slpmed, 
      *  Yintmed, ssefltmed, sseslpmed, mknt)
-c      print *,nobs, xmean, ymean, slope, 
-c     *  Yint, sseflat, sseslope, mknt
+c      print *,'kthline', nobs, xmed, ymed, slpmed, 
+c     *  Yintmed, ssefltmed, sseslpmed, mknt
+c      print *,xseg
 c     save the "reduced" SSE for the TPR models
       SSEred = sseslope
       SSEredmed = sseslpmed

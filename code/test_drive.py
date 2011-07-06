@@ -12,18 +12,24 @@ import random
 # http://docs.python.org/library/operator.html
 from operator import itemgetter
 
+from math import sqrt
+
 import os
 import copy
 
 # ccf-homogenization imports
 import ushcn_io
 from ushcn_data import Network
+
 from util import compute_monthly_anomalies, scale_series, get_valid_data
+from util import compute_mean
 
 from mw2009.preprocess import find_neighborhood, neighborhood_strings
 from mw2009.preprocess import find_correlations
 
 from mw2009.splitmerge import diff, standardize, lrt_lookup, snht
+
+from mw2009.chgptmodels import bayes, kth_line, t_test, lookup_critical
 
 import parameters
 
@@ -233,8 +239,10 @@ hom_params = dict(nstns=params.nstns,
                 )
 hom_params = parameters.Parameters(**hom_params)
 
-id1 = "215887"
-id2 = "116738"
+#id1 = "215887"
+#id2 = "215615"
+id2 = "153430"
+id1 = "034572"
 
 minann = 5
 begyr, endyr = hom_params.begyr, hom_params.endyr
@@ -489,14 +497,268 @@ while (iter < 10) and not enter_BIC:
         breakpoints = list(merged_breakpoints)
     breakpoints = sorted(breakpoints)
     
-    enter_BIC =  (breakpoints == last_breakpoints)
+    enter_BIC = (breakpoints == last_breakpoints)
     iter = iter + 1
     
 ## Okay wow, we've potentially made it to the BIC stage now... !
+if first not in breakpoints:
+    breakpoints.insert(0, first)
 ym_breakpoints = map(imo2iym, breakpoints)
 print ym_breakpoints
 
+## ENTERING MINBIC
+#left, bp, right = breakpoints[6:9]
+left, bp, right = breakpoints[1:4]
+if left != first:
+    left = left + 1
+# recall that we only consider data after the first full year. we will be 
+# computing regressions with the independent variable indexed from this 
+# starting point, so we need to shift these indices. we also need to shift them
+# by +1 if this is any segment beyond the first one, so that we don't include
+# changepoints in more than one analysis.
+# TOTAL_SHIFT = -12 + 1 = -11
+# 
+# However, this shift is only necessary while looking at the array indices that
+# we generate using range(). the data should already be aligned correctly.
+total_shift = -12 + 1
+left_shift, bp_shift, right_shift = left+total_shift, bp+total_shift, right+total_shift
+y1, m1 = imo2iym(left)
+yb, mb = imo2iym(bp)
+y2, m2 = imo2iym(right)
+print "Entering MINBIC - %4d %2d    %4d %2d    %4d %2d" % (y1, m1, yb,
+                                                           mb, y2, m2)
 
+## Print header for BIC changepoint testing -
+left_header = " QTYP     QVAL    QRSE     QPF     MU1     MU2  ALPHA1"
+right_header = "  ALPHA2   MSTAT   MCRIT    MOFF KNT1 KNT2"
+print (left_header+right_header)
 
+################################################################################     
+
+## Looks like the first test is KTHSLR1, kendall-theil method with slope calc
+## We perform this test on the entire interval containing the breakpoint
+(seg_x, seg_data) = range(left_shift, right_shift+1), diff_data[left:right+1] 
+cmodel = "KTHSLR1"
+#lsql = least_squares(seg_x, seg_data, MISS)
+kthl = kth_line(seg_x, seg_data, MISS)
+
+nobs = right-left+1
+slpmed = kthl.slope
+yintmed = kthl.y_int
+sseredmed = kthl.sseslope
+nval = kthl.nval
+qoff = 0.0
+
+qslr1, rsq1, rsq2 = bayes(nobs, sseredmed, 2)
+# output string
+head = "%7s %6.2f %7.2f %7.2f" % (cmodel, qslr1, rsq1, rsq2)
+stats =  " %7.2f ------- %7.3f ------- ------- -------" % (yintmed, slpmed)
+tail = "% 7.2f %5d ----" % (qoff, nval)
+print (head+stats+tail)
+
+################################################################################     
+
+## Now we begin the two-phase regressions, where we use the kendall-theil fit
+## on the data at either side of the breakpoint.
+##
+## The first regression assumes that the segments have the same slope
+left_seg = range(left_shift, bp_shift+1)
+left_data = diff_data[left:bp+1]
+right_seg = range(bp_shift+1, right_shift+1)
+right_data = diff_data[bp+1:right+1]
+
+# kendall-theil method with 0 sloped segments
+cmodel = "KTHTPR0"
+
+kthl_left = kth_line(left_seg, left_data, MISS)
+kthl_right = kth_line(right_seg, right_data, MISS)
+
+left_y_med = kthl_left.y_med
+right_y_med = kthl_right.y_med
+q_off = left_y_med - right_y_med
+
+n_left = kthl_left.nval
+n_right = kthl_right.nval
+n_total = n_left + n_right
+
+stat_test = t_test(left_data, right_data, MISS)
+t_val = stat_test.t_val
+t_crit = lookup_critical(n_total-2, "t")
+
+sse_sum = kthl_left.sseflat + kthl_right.sseflat
+qslr1, rsq1, rsq2 = bayes(n_total, sse_sum, 3)
+# output string
+head = "%7s %6.2f %7.2f %7.2f" % (cmodel, qslr1, rsq1, rsq2)
+stats =  " %7.2f %7.2f ------- ------- %7.2f %7.2f" % (left_y_med, right_y_med,
+                                                      t_val, t_crit)
+tail = "% 7.2f %5d %4d" % (q_off, n_left, n_right)
+print (head+stats+tail)
+
+################################################################################     
+
+## The second regression tests for a step change with equal (constant) sloped
+## segments
+
+all_data = diff_data[left:right+1]
+nobs = right+1-left
+left_data = diff_data[left:bp+1]
+right_data = diff_data[bp+1:right+1]
+
+## 1) Compute the mean for *all* of the data
+all_valid_data = get_valid_data(all_data, MISS)
+all_mean = compute_mean(all_valid_data, valid=True)
+
+## 2) use kendall-theil method with single slope
+# This method is slightly different than the kth_line() method above.
+# First, we get only the valid data, and we pair it with the natural ordering
+# of the data, i.e. 1, 2, 3...
+valid_all = all_valid_data
+n_all = len(valid_all)
+range_all = range(1, n_all+1)
+
+valid_left = get_valid_data(left_data, MISS)
+valid_right = get_valid_data(right_data, MISS)
+
+n_left, n_right = len(valid_left), len(valid_right)
+range_left = range(1, n_left+1)
+range_right = range(n_left+1, n_all+1)
+
+# Second, generate paired slopes for the first segment.
+nslp = 0
+r_temp = []
+for i in range(n_left-1):
+    for j in range(i, n_left):
+        if range_left[j] != range_left[i]:
+            nslp = nslp + 1
+            r_temp.append( (valid_left[j]-valid_left[i])/
+                           (range_left[j]-range_left[i]) )
+# Third, generate paired slopes for the second segment.
+for i in range(n_right-1):
+    # BUG: MW2009 code in chgptmodels.kendallthiell, line 2229 starts the 'j'
+    #     index at ibeg2+1. This corresponds to 1 here. Above in the first
+    #     segment and in kth_line(), it starts the 'j' index right where 'i' 
+    #     left off.
+    for j in range(1, n_right):
+        if range_right[j] != range_right[i]:
+            nslp = nslp + 1
+            r_temp.append( (valid_right[j]-valid_right[i])/
+                           (range_right[j]-range_right[i]) )
+            
+#Fourth, find the median slope from all the ones we computed
+islope = 1
+if not islope:
+    r_slope = 0.0
+else:
+    r_temp = sorted(r_temp)
+    imed = (nslp - 1)/2
+    if (nslp%2)==1: imed = imed+1 # offset by one to right if odd
+    r_slope = r_temp[imed]
     
+print "slope, ic, imet: %7.2f %5d %5d" % (r_slope, nslp, imed)
+
+# Fifth, compute the first segment intercept, y-median - slope*x-median
+imed = (n_left - 1)/2
+if (n_left%2)==1: imed = imed+1
+range_med = range_left[imed]
+valid_left = sorted(valid_left)
+data_med = valid_left[imed]
+left_y_int = data_med-r_slope*range_med
+print "Seg1 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
+                                                                   data_med,
+                                                                   r_slope,
+                                                                   left_y_int)
+# BUG: Again in chgptmodel.kendalltheill(), there is a bug on line 2339. Starting
+#     here, we over-write the medians we found in both lists, and use the second
+#     segment for all our computations! I reproduce that behavior ehre by using the
+#     generic range_med and data_med values for rXmed and rYmed. Should we not
+#     care about different medians for each segment?
+# Sixth, compute the second segment intercept
+imed = (n_right - 2)/2
+if (n_right%2)==1: imed = imed + 1
+range_med = range_right[imed]
+valid_right = sorted(valid_right)
+data_med = valid_right[imed]
+right_y_int = data_med-r_slope*range_med
+print "Seg2 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
+                                                                   data_med,
+                                                                   r_slope,
+                                                                   right_y_int)
+
+# Seventh, we compute root mean square error of the residuals
+residuals = [MISS]*n_all # residuals of the fit
+fit = [MISS]*n_all       # fitted regression line
+valid_count = 0          # total number of non-missing values used
+r_sum_sqr_x = 0.0     
+r_sum_sqr_e = 0.0        # sum square of residuals
+                         # r_slope - slope of linear regression line
+                         # r_t - slope error
+for i in range(n_all):
+    if all_data[i] != MISS:
+        valid_count = valid_count + 1
+        if valid_count < n_left:
+            y_int = left_y_int
+        else:
+            y_int = right_y_int
+        residuals[i] = (y_int + r_slope*(i+1)) - all_data[i]
+        fit[i] = y_int + r_slope*(i+1)
+        r_sum_sqr_e = r_sum_sqr_e + residuals[i]**2
+        r_sum_sqr_x = r_sum_sqr_x + (float(i+1) - data_med)**2
+
+r_se_sqr = r_sum_sqr_e / (valid_count - 2)
+r_sb = sqrt(r_se_sqr / r_sum_sqr_x)
+r_t = r_slope / r_sb
+
+############## END KENDALLTHIELL()
+r_mu = (left_y_int, right_y_int)
+r_alpha = r_slope
+SSE_red = r_sum_sqr_e
+
+# 3) Now it looks like we compute residuals for all our data
+r_residuals = [MISS]*nobs
+rssx = 0.0
+rsse = [0.0, 0.0]
+for k in range(nobs):
+    if all_data[k] != MISS:
+        if k < (bp+1-left):
+            ind = 0
+        else:
+            ind = 1
+        r_residuals[k] = all_data[k] - r_mu[ind] - r_alpha*(k+1)
+        rsse[ind] = rsse[ind] + r_residuals[k]**2
+        rssx = rssx + (float(k+1) - all_mean)**2
+
+# 4) We now have the squared error and are basically done!
+r_sum_sqr_tot = sum(rsse)
+
+############## END KTHTPR1()
+
+# At this point, we have a few things - 
+#    r_mu - the y_intercepts of each segment
+#    r_alpha - the slope
+#    r_sum_sqr_tot - sum sqr total of residuals
+#
+# We now print out the info and compute critical values, BIC
+count = n_all
+left_count, right_count = n_left, n_right
+sseful = r_sum_sqr_tot # just computed
+# F-statistic
+f_val = ((sseredmed-sseful)/1.)/(sseful/(count-3))
+f_crit = lookup_critical(count-3, "f1")
+qslr1, rsq1, rsq2 = bayes(count, sseful, 4)
+# amplitude change estimate
+y1 = r_mu[0] + r_alpha * range_all[bp+1-left]
+y2 = r_mu[1] + r_alpha * range_all[bp+1-right]
+est = y1-y2
+# k, we have finished this god-awful changepoint
+# output string
+head = "%7s %6.2f %7.2f %7.2f" % (cmodel, qslr1, rsq1, rsq2)
+stats =  " %7.2f %7.2f %7.3f ------- %7.2f %7.2f" % (r_mu[0], r_mu[1],
+                                                     r_alpha, f_val, f_crit)
+tail = "% 7.2f %5d %4d" % (q_off, n_left, n_right)
+print (head+stats+tail)
+
+################################################################################     
+
+## GOOD TO HERE! 
+
 
