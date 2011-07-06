@@ -596,8 +596,9 @@ print (head+stats+tail)
 
 ################################################################################     
 
-## The second regression tests for a step change with equal (constant) sloped
+## The third regression tests for a step change with equal (constant) sloped
 ## segments
+cmodel = "KTHTPR1"
 
 all_data = diff_data[left:right+1]
 nobs = right+1-left
@@ -754,11 +755,98 @@ est = y1-y2
 head = "%7s %6.2f %7.2f %7.2f" % (cmodel, qslr1, rsq1, rsq2)
 stats =  " %7.2f %7.2f %7.3f ------- %7.2f %7.2f" % (r_mu[0], r_mu[1],
                                                      r_alpha, f_val, f_crit)
-tail = "% 7.2f %5d %4d" % (q_off, n_left, n_right)
+tail = "% 7.2f %5d %4d" % (est, n_left, n_right)
 print (head+stats+tail)
 
 ################################################################################     
 
-## GOOD TO HERE! 
+## The fourth regression tests for a step change with any sloped segments, i.e.
+## a full two phase regression. We borrow some of hte calculatiosn above, for
+## simplicity' sake
+cmodel = "KTHTPR2"
+
+all_data = diff_data[left:right+1]
+nobs = right+1-left
+
+left_seg = range(left_shift, bp_shift+1)
+left_data = diff_data[left:bp+1]
+right_seg = range(bp_shift+1, right_shift+1)
+right_data = diff_data[bp+1:right+1]
+
+kthl_left = kth_line(left_seg, left_data, MISS)
+kthl_right = kth_line(right_seg, right_data, MISS)
+
+y1 = kthl_left.y_int + kthl_left.slope*left_seg[-1]
+y2 = kthl_right.y_int + kthl_right.slope*right_seg[0]
+est = y1 - y2
+
+count = len(get_valid_data(left_data, MISS))+len(get_valid_data(right_data, MISS))
+
+SSEful = kthl_left.sseslope + kthl_right.sseslope
+print kthl_left.sseslope, kthl_right.sseslope, sseredmed
+
+# note - sseredmed is the sse residuals of the slope from the kth_line for the 
+#    entire data segment
+f2_val = ((sseredmed-SSEful)/2.)/(SSEful/(count-4))
+f2_crit = lookup_critical(count-4, "f2")
+qslr1, rsq1, rsq2 = bayes(count, SSEful, 5)
+# output string
+head = "%7s %6.2f %7.2f %7.2f" % (cmodel, qslr1, rsq1, rsq2)
+stats =  " %7.2f %7.2f %7.3f %7.3f %7.2f %7.2f" % (kthl_left.y_int, kthl_right.y_int,
+                                                   kthl_left.slope, kthl_right.slope,
+                                                   f2_val, f2_crit)
+tail = "% 7.2f %5d %4d" % (est, n_left, n_right)
+print (head+stats+tail)
+
+################################################################################     
+
+## The fifth regression tests for a step change with flat-to-sloped segments.
+## Again, we will make use of some of the other values we have found.
+cmodel = "KTHTPR3"
+
+y1 = kthl_left.y_med
+y2 = kthl_right.y_int + kthl_right.slope*right_seg[0]
+est = y1 - y2
+
+count = len(get_valid_data(left_data, MISS))+len(get_valid_data(right_data, MISS))
+
+SSEful = kthl_left.sseflat + kthl_right.sseslope
+# note - sseredmed is the sse residuals of the slope from the kth_line for the 
+#    entire data segment
+f_val =  ((sseredmed-SSEful)/1.0)/(SSEful/(count-3))
+f_crit = lookup_critical(count, "f1")
+qslr1, rsq1, rsq2 = bayes(count, SSEful, 4)
+# output string
+head = "%7s %6.2f %7.2f %7.2f" % (cmodel, qslr1, rsq1, rsq2)
+stats =  " %7.2f %7.2f ------- %7.3f %7.2f %7.2f" % (kthl_left.y_med, kthl_right.y_int,
+                                                    kthl_right.slope, f_val, f_crit)
+tail = "% 7.2f %5d %4d" % (est, n_left, n_right)
+print (head+stats+tail)
+
+################################################################################     
+
+## The sixth regression tests for a step change with sloped-to-flat segments.
+## Again, we will make use of some of the other values we have found.
+cmodel = "KTHTPR4"
+
+y1 = kthl_left.y_int + kthl_left.slope*left_seg[-1]
+y2 = kthl_right.y_med
+est = y1 - y2
+
+count = len(get_valid_data(left_data, MISS))+len(get_valid_data(right_data, MISS))
+
+SSEful = kthl_left.sseslope + kthl_right.sseflat
+f_val = ((sseredmed-SSEful)/1.0)/(SSEful/(count-3))
+f_crit = lookup_critical(count, "f1")
+# note - sseredmed is the sse residuals of the slope from the kth_line for the 
+#    entire data segment
+qslr1, rsq1, rsq2 = bayes(count, SSEful, 4)
+# output string
+head = "%7s %6.2f %7.2f %7.2f" % (cmodel, qslr1, rsq1, rsq2)
+stats =  " %7.2f %7.2f %7.3f ------- %7.2f %7.2f" % (kthl_left.y_int, kthl_right.y_med,
+                                                     kthl_left.slope, f_val, f_crit)
+tail = "% 7.2f %5d %4d" % (est, n_left, n_right)
+print (head+stats+tail)
+
 
 

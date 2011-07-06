@@ -573,6 +573,7 @@ c     step change with any sloped segments (full two phase regression)
         est = y1 - y2
         mKnt = mkntme1 + mkntme2
         SSEful = SSEslpme1 + SSEslpme2
+        print *, SSEslpme1, SSEslpme2, SSEredmed
         F2n4 = ((SSEredmed - SSEful)/2.)/(SSEful/(mknt-4))
         ftpr = critval(mknt-4, 5)
         call bayes(mknt, SSEful, 5, qtpr, rsq1, rsq2)
@@ -1659,7 +1660,7 @@ c     now, put them all together
       xsq3 = xsq1 + xsq2
       if(xsq3 .lt. eps) xsq3 = eps
       tt = abs(xbar1-xbar2) / sqrt(xsq3)
-
+      
       return
       end
 
