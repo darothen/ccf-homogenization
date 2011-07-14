@@ -18,6 +18,44 @@ from operator import itemgetter
 # ccf-homogenization imports
 from parameters import RADIUS_EARTH
 
+def imo2iym(imo, beg_year=1900):
+    """Converts indices in a list of monthly values to their year, month 
+    corresponding values, starting from the first month in beg_year.
+    
+    Consider a list of monthly values with no gaps. The values in this list
+    will correspond to the (year, month) tuple list -
+    [(beg_year, 1), (beg_year, 2), (beg_year, 3), ..., beg_year, 12),
+     (beg_year+1, 1), ...]
+    
+    This method will return the (year_month) pair at the given index, imo.
+    
+    :Param imo:
+        The index (starting at 0) to convert to a (year, month) pair.
+    :Param beg_year:
+        (optional) The starting year corresponding to index 0. Default = 1990.
+    :Returns:
+        The (year, month) pair corresponding to the given index.
+    
+    """
+    year = beg_year+(imo/12)
+    month = 1+(imo%12)
+    return year, month
+
+def within(test_interval, whole_interval):
+    """Tests whether a given interval is entirely within a larger one.
+    
+    :Param test_interval:
+        The suspected interior interval as a two-integer tuple.
+    :Param whole_interval:
+        The larger interval to test against, as a two-integer tuple.
+    :Returns:
+        True if the endpoints of test_interval lie entirely within
+        whole_interval.
+    
+    """
+    test_l, test_r = test_interval
+    whole_l, whole_r = whole_interval
+    return (whole_l <= test_l <= test_r <= whole_r)
 
 def get_valid_data(data, missing_val=-9999):
     """Return only the valid values in a dataset.

@@ -6,7 +6,7 @@ from util import compute_arc_dist, compute_first_diff, compute_corr, compute_std
 
 from operator import itemgetter
 
-def find_neighborhood(station, stations_list, numsrt=40, mindist=200.0):
+def find_neighborhood(station, stations_list, numsrt=40, mindist=200.0, **kwargs):
     """
     Determines the neighborhood comprised of the closes numsrt neighbors located
     around a given station. 

@@ -23,6 +23,7 @@ RADIUS_EARTH = 6371.0
 class Parameters(dict):
     
     def __init__(self, **params):
+        dict.__init__(self, **params)
         self.__dict__.update(params)
         
     def __repr__(self):
