@@ -72,33 +72,29 @@ def standardize(data, missing_val=-9999):
     
     """
     
-    ## Find the valid data to use to compute the mean, etc.
-    #valid_data = get_valid_data(data[left:right+1], missing_val)
+    ## Find the valid data to use to compute the data_mean, etc.
     valid_data = get_valid_data(data, missing_val)
-    rNum = len(valid_data)
-    rMean = compute_mean(valid_data, valid=True)
-    rSum = sum(valid_data)
+    num_vals = len(valid_data)
+    data_mean = compute_mean(valid_data, valid=True)
 
-    ## Compute the sum the squared error for each term
-    rVarSumm = 0.0
+    ## Compute the sum the squared error for each term (variance)
+    variance_sum = 0.0
     for d in valid_data:
-        rVarSumm = rVarSumm + (d-rMean)**2
+        variance_sum = variance_sum + (d-data_mean)**2
 
-    ## The standard deviation is the root of the TSE
-    rsqVar = sqrt(rVarSumm/(rNum-2))
+    ## The standard deviation is the root of the sum of the squared error
+    sum_std = sqrt(variance_sum/(num_vals-2))
     
     ## Normalize each data value using this standard deviation
-    rStd = []
+    standardized_data = []
     #for d in data[left:right+1]:
     for d in data:
         if d!= missing_val:
-            rStd.append((d-rMean)/rsqVar)
+            standardized_data.append((d-data_mean)/sum_std)
         else:
-            rStd.append(missing_val)
+            standardized_data.append(missing_val)
             
-    #print rMean, rSum, rNum, rVarSumm, rsqVar
-            
-    return rStd
+    return standardized_data
 
 def lrt_lookup(num_vals):
     """Looks up the test statistic critical value corresponding to a significance
@@ -149,48 +145,79 @@ def lrt_lookup(num_vals):
         crit_val = crit_left + slope*interp
         return crit_val
     
-def snht(data, missing_val=-9999, mcnt=None, standardized=False):
+def snht(data, missing_val=-9999, valid_count=None, standardized=False):
     """Standard normal homogeneity test
+    
+    Loops over the given data and computes the likelihood ratio statistic for
+    every value, using that value as the pivot to divide the data in two
+    segments.
+    
+    :Param data:
+        The data, as a list of floats, on which to conduct the test.
+    :Param missing_val:
+        (optional) The placeholder for missing values which should be excluded
+        from computations.
+    :Param valid_count:
+        (optional) The number of valid values in the dataset.
+    :Param standardized:
+        (optional) Boolean flag indicating whether or not the data has already
+        been standardized into a reference series. If not, will invoke the 
+        standardization procedure on the data.
+    :Return:
+        A list with the same shape as the original list of data, containing
+        the likelihood ratio test statistic for each data point. Missing values
+        in the input data will be carried into the output list.
     
     """
     
+    ## Standardize the data if this hasn't already been done
     if not standardized:
         data = standardize(data, missing_val)
         
-    # return array of computed test statistics, initialized to missing_val
+    ## Return array of computed test statistics, initialized to missing_val's
     ts = [missing_val for d in data]
     
-    if not mcnt:
-        mcnt = len(get_valid_data(data, missing_val))
+    if not valid_count:
+        valid_count = len(get_valid_data(data, missing_val))
 
-    pivot_count = range(mcnt-1)
+    pivot_count = range(valid_count-1)
     
     # BUG: This is *really* counter-intuitive, and probably a bug in the original 
-    #     PHA code. Here, and in the PHA code, we use mcnt to effectively truncate
-    #     the right tail of the data. The catch is, mcnt is hte number of 'valid'
+    #     PHA code. Here, and in the PHA code, we use valid_count to effectively truncate
+    #     the right tail of the data. The catch is, valid_count is the number of 'valid'
     #     data points - not *all* the data points. Because we end the right-seek
-    #     at mcnt, we end up missing some of the data on the far right hand side
+    #     at valid_count, we end up missing some of the data on the far right hand side
     #     of the array.
+    #
+    # -- CONFIRMED that this is a bug. Fix commented out below to be deployed
+    #    when a new copy of the Fortran PHA is available.
     for pivot in pivot_count:
         
+        ## Loop over the data, using each point as a pivot for computing the 
+        ## likelihood ratio statistic.
         if data[pivot] != missing_val:
             left_series = get_valid_data(data[:pivot+1])
-            right_series = get_valid_data(data[pivot+1:mcnt])
+            right_series = get_valid_data(data[pivot+1:valid_count]) # BUG Line
+           #right_series = get_valid_data(data[pivot+1:]) # FIX Line
             
+            ## Compute mean of data left of the pivot; skip to next pivot value
+            ## if no good data was found in this segment.
             sum_left = sum(left_series)
             nleft = len(left_series)
             if nleft != 0:
                 mean_left = sum_left/nleft
             else:
-                break
-        
+                continue
+            
+            ## Do the same for the data right of the pivot.
             sum_right = sum(right_series)
             nright = len(right_series)
             if nright != 0:
                 mean_right = sum_right/nright
             else:
-                break
+                continue
             
+            ## Compute and store test statistics
             ts[pivot] = nleft*(mean_left**2) + nright*(mean_right**2)
     
     return ts
@@ -202,8 +229,10 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
     
     #id1 = "215887"
     #id2 = "215615"
-    id2 = "153430"
-    id1 = "034572"
+    #id2 = "153430"
+    #id1 = "034572"
+    id2="215887"
+    id1="331152"
     
     ## 
     raw_series = network.raw_series
