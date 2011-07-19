@@ -533,8 +533,10 @@ c         and the model type has not been changed to slr0 or slr1
         iprocess = 0
         if(method .eq. 3) then
           iprocess = 1
+          print *,"top"
         else if(inhstns(ichg) .ne. 3 .and. modtype .ge. 3) then
           iprocess = 1
+          print *,"bottom",modtype
 c         test the incoming stattest (inqtype) against the best minbic 
 c           data model (modtype). The following compatibilities are assumed:
 c            inqtype    modtype
@@ -547,10 +549,15 @@ c          if(inqtype .eq. 3 .and. modtype .ne. 3) then
 c         V21F modification - ALLOW ALL TPR MODELS FOR TPR0
           if(inqtype .eq. 3 .and. modtype .lt. 3) then
             iprocess = 0
+            print *,'first',inqtype,modtype
           else if(inqtype .eq. 4) then
-            if(modtype .ne. 3 .and. modtype .ne. 4) iprocess = 0
+            if(modtype .ne. 3 .and. modtype .ne. 4) then
+               iprocess = 0
+               print *,'second',inqtype,modtype
+            endif 
           else if(inqtype .eq. 5 .and. modtype .lt. 3) then
             iprocess = 0
+            print *,'third',inqtype,modtype
           endif  
         endif  
         if(iprocess .eq. 0) then

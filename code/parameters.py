@@ -12,8 +12,6 @@ into another workflow.
 """
 __docformat__ = "restructuredtext"
 
-import UserDict
-
 #: The following values are constants 
 
 #: The radius of the earth, in kilometers
