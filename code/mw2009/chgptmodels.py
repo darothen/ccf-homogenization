@@ -32,7 +32,7 @@ minbic_models = [
                  ]
 
 class Stats(dict):
-    """Base object for returning results of statistical tests
+    """Base object for returning results of statistical tests.
     
     """
     def __init__(self, test_name, **params):
@@ -64,6 +64,8 @@ def least_squares(x, y, missing_val=-9999):
     assert len(x) == len(y)
     
     # fcn to determine whether a value in a pair is invalid
+    def valid_pair(pair, missing_val=-9999):
+        return ( (pair[0] != missing_val))
     valid_pair = lambda pair: ((pair[0] != missing_val) and 
                                (pair[1] != missing_val))
     
@@ -76,32 +78,13 @@ def least_squares(x, y, missing_val=-9999):
     nval = len(good_data)
     x_mean = compute_mean(good_x, valid=True)
     y_mean = compute_mean(good_y, valid=True)
-    
-    '''
-    nval = 0.0
-    sum_x, sum_y = 0.0, 0.0
-    for (x_val, y_val) in zip(x, y):
-        if x_val != missing_val and y_val != missing_val:
-            nval = nval + 1
-            sum_x = sum_x + x_val
-            sum_y = sum_y + y_val
-            
-    x_mean = sum_x/nval
-    y_mean = sum_y/nval
-    '''
-                
+         
     # calculate slope and y intercept   
     numer = 0.0
     denom = 0.0
     for (x_val, y_val) in good_data:
         numer = numer + (x_val-x_mean)*(y_val-y_mean)
         denom = denom + (x_val-x_mean)*(x_val-x_mean)
-    '''
-    for (x_val, y_val) in zip(x, y):
-        if x_val != missing_val and y_val != missing_val:
-            rnum1 = rnum1 + (x_val-x_mean)*(y_val-y_mean)
-            rden1 = rden1 + (x_val-x_mean)*(x_val-x_mean)
-    '''
     
     slope = numer/denom
     y_int = y_mean - slope*x_mean
@@ -113,13 +96,6 @@ def least_squares(x, y, missing_val=-9999):
         sseflat = sseflat + (y_mean-y_val)**2
         resid = (y_int + slope*x_val) - y_val
         sseslope = sseslope + resid**2
-    '''
-    for (x_val, y_val) in zip(x, y):
-        if x_val != missing_val and y_val != missing_val:
-            sseflat = sseflat + (y_mean - y_val)**2
-            resid = (y_int + slope*x_val) - y_val
-            sseslope = sseslope + resid**2
-    '''
     
     # return a Stats object with all of these computed values
     return Stats(test_name="least-squares", x_mean=x_mean, y_mean=y_mean,
@@ -383,6 +359,16 @@ def minbic(x, y, bp_index, missing_val=-9999):
     right_header = "  ALPHA2   MSTAT   MCRIT    MOFF KNT1 KNT2"
     print (left_header+right_header)
     
+    # The following container class will help us record computed values (like
+    # errors for different models, etc) for re-use in the following tests.
+    class Values:
+        """Container class for recording and passing along values computed by
+        each of the changepoint detection functions.
+                
+        """
+        pass
+    vals = Values()
+    
     # For storing the results of these tests.
     changepoint_dict = dict()
     
@@ -391,34 +377,35 @@ def minbic(x, y, bp_index, missing_val=-9999):
     ##    Method - Use Kendall-Theill method to compute a linear regression to
     ##            all of the data. We tacitly assume this model as the null
     ##            hypothesis; we must reject this model in order to accept one
-    ##            of the more-complicated ones to follow.    
-    cmodel = "KTHSLR1"
-    kth_regression = kth_line(x, y, missing_val)
-    
-    num_obs =  len(x) # total number of observations
-    n_vals = kth_regression.nval # number of non-missing observations
-    slope = kth_regression.slope
-    y_int = kth_regression.y_int
-    sse_resid = kth_regression.sseslope
-    amp_est = 0.0
-    
-    # Bayes Info Criterion - total, due to error in variance, and penalty
-    b_tot, b_err, b_pen = bayes(num_obs, sse_resid, 2)
-    # output string
-    head = "%7s %6.2f %7.2f %7.2f" % (cmodel, b_tot, b_err, b_pen)
-    stats =  " %7.2f ------- %7.3f ------- ------- -------" % (y_int, slope)
-    tail = " %7.2f %5d ----" % (amp_est, n_vals)
-    print (head+stats+tail)
-    
-    ## Record the results of this test
-    changepoint_dict[cmodel] = dict(bic=b_tot, 
-                                    mu=[y_int, y_int],
-                                    alpha=[slope, slope], 
-                                    sse_bic=(sse_resid/n_vals),
-                                    seg_lens=[n_vals, 0],
-                                    test_stat=0.0,
-                                    crit_val=0.0,
-                                    amp_est=amp_est) 
+    ##            of the more-complicated ones to follow.
+    def kthslr1(x, y, bp_index, vals, missing_val=-9999):
+        cmodel = "KTHSLR1"
+        kth_regression = kth_line(x, y, missing_val)
+        
+        num_obs =  len(x) # total number of observations
+        n_vals = kth_regression.nval # number of non-missing observations
+        slope = kth_regression.slope
+        y_int = kth_regression.y_int
+        sse_resid = kth_regression.sseslope
+        amp_est = 0.0
+        
+        # Bayes Info Criterion - total, due to error in variance, and penalty
+        b_tot, b_err, b_pen = bayes(num_obs, sse_resid, 2)
+        # output string
+        head = "%7s %6.2f %7.2f %7.2f" % (cmodel, b_tot, b_err, b_pen)
+        stats =  " %7.2f ------- %7.3f ------- ------- -------" % (y_int, slope)
+        tail = " %7.2f %5d ----" % (amp_est, n_vals)
+        print (head+stats+tail)
+        
+        ## Record the results of this test
+        changepoint_dict[cmodel] = dict(bic=b_tot, 
+                                        mu=[y_int, y_int],
+                                        alpha=[slope, slope], 
+                                        sse_bic=(sse_resid/n_vals),
+                                        seg_lens=[n_vals, 0],
+                                        test_stat=0.0,
+                                        crit_val=0.0,
+                                        amp_est=amp_est) 
     
     ############################################################################  
     ## TEST 2 - KTHTPR0, Amplitude change, no slope change
