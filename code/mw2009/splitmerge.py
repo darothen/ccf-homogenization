@@ -15,6 +15,8 @@ from copy import deepcopy
 from math import sqrt
 # http://docs.python.org/library/operator.html
 from operator import itemgetter
+#http://docs.python.org/library/itertools.html
+from itertools import combinations
 
 # ccf-homogenization imports
 from util import get_valid_data, compute_mean
@@ -226,344 +228,370 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
     
     ## EXPERIMENTAL PLACEHOLDERS - will eventually be replaced with a master
     ## loop to do all the id pairs.
+    id_list = sorted(network.stations.keys())
+    pair_results = dict()
     
-    #id1 = "215887"
-    #id2 = "215615"
-    #id2 = "153430"
-    #id1 = "034572"
-    id2="215887"
-    id1="324418"
+    for (id1, id2) in combinations(id_list, 2):
+        pair_str = "%6s-%6s" % (id1, id2)
+        #id1 = "298107"
+        #id2 = "427260"
     
-    ## 
-    raw_series = network.raw_series
-    stations = network.stations
-    series_copy = deepcopy(raw_series)
-    
-    min_ann = 5
-    num_years = end_year - beg_year
-    num_months = num_years*12
+        ## 
+        raw_series = network.raw_series
+        stations = network.stations
+        series_copy = deepcopy(raw_series)
         
-    for s in series_copy.itervalues():
-        data = s.series
-        scaled = scale_series(data, 0.1, s.MISSING_VAL)
-        anomalies = compute_monthly_anomalies(scaled, s.MISSING_VAL)
-        s.set_series(anomalies, s.years)
-    
-    ## Retrieve the data for each of the stations.
-    station1 = stations[id1]
-    series1 = series_copy[id1]
-    data1 = series1.monthly_series
+        min_ann = 5
+        num_years = end_year - beg_year
+        num_months = num_years*12
             
-    station2 = stations[id2]
-    series2 = series_copy[id2]
-    data2 = series2.monthly_series
-    
-    ## Compute the difference series        
-    diff_data = diff(data1, data2)
-    MISS = series1.MISSING_VAL # Missing value placeholder
-    
-    ## Quickly pass through the data to find where it starts. We need to do this
-    ## because it's possible that beg_year is earlier than the first year of 
-    ## valid data in either data1 or data2. Furthermore, the original PHA code
-    ## deliberately clipped off the first year of good data, so emulate that 
-    ## effect here as well.
-    ##
-    ## Ultimately, we save the extreme early and extreme late month with valid
-    ## data to use as our first guess at the undocumented changepoints.
-    first = 0
-    #first_set = False
-    last = 0
-    for (i, d1, d2) in zip(xrange(num_months), data1, data2):
-        if d1!=MISS and d2!=MISS:
-            if first < 12:
-                first = i
-                #first_set = True
-            last = i
-    
-    ## Set the initial breakpoints and the list of already-found, homogenous
-    ## segments.    
-    breakpoints = [first, last, ]
-    homog_segs = []
-    
-    #####################################################################
-    ## BEGIN SPLITMERGE PROCESS TO GENERATE FIRST GUESS AT UNDOCUMENTED
-    ## CHANGEPOINTS
-    iter = 0 # counts how many times we've repeated the splitmerge process
-    enter_BIC = False # break out of iterations into the BIC process?
-    last_breakpoints = []
-    while (iter < 10) and not enter_BIC:
+        for s in series_copy.itervalues():
+            data = s.series
+            scaled = scale_series(data, 0.1, s.MISSING_VAL)
+            anomalies = compute_monthly_anomalies(scaled, s.MISSING_VAL)
+            s.set_series(anomalies, s.years)
         
-        seg_bounds = zip(breakpoints[:-1], breakpoints[1:])
-        last_breakpoints = deepcopy(breakpoints)
-        new_breakpoints = deepcopy(breakpoints)
-            
-        new_homog_segs = []
-    
-        print "Parse segments (isplit = 1), ipass: ", iter
-        print breakpoints
-        print seg_bounds
+        ## Retrieve the data for each of the stations.
+        station1 = stations[id1]
+        series1 = series_copy[id1]
+        data1 = series1.monthly_series
+                
+        station2 = stations[id2]
+        series2 = series_copy[id2]
+        data2 = series2.monthly_series
+        
+        ## Compute the difference series        
+        diff_data = diff(data1, data2)
+        MISS = series1.MISSING_VAL # Missing value placeholder
+        
+        ## Quickly pass through the data to find where it starts. We need to do this
+        ## because it's possible that beg_year is earlier than the first year of 
+        ## valid data in either data1 or data2. Furthermore, the original PHA code
+        ## deliberately clipped off the first year of good data, so emulate that 
+        ## effect here as well.
+        ##
+        ## Ultimately, we save the extreme early and extreme late month with valid
+        ## data to use as our first guess at the undocumented changepoints.
+        first = 0
+        #first_set = False
+        last = 0
+        for (i, d1, d2) in zip(xrange(num_months), data1, data2):
+            if d1!=MISS and d2!=MISS:
+                if first < 12:
+                    first = i
+                    #first_set = True
+                last = i
+        
+        ## Set the initial breakpoints and the list of already-found, homogenous
+        ## segments.    
+        breakpoints = [first, last, ]
+        homog_segs = []
         
         #####################################################################
-        ## Loop over the segments we have just found and apply the 
-        ## semi-hierarchical splitting algorithm and a 5% significance level
-        ## to find where there is a split.
-        for (l, r) in seg_bounds:
+        ## BEGIN SPLITMERGE PROCESS TO GENERATE FIRST GUESS AT UNDOCUMENTED
+        ## CHANGEPOINTS
+        iter = 0 # counts how many times we've repeated the splitmerge process
+        enter_BIC = False # break out of iterations into the BIC process?
+        last_breakpoints = []
+        while (iter < 10) and not enter_BIC:
             
-            y1, m1 = imo2iym(l)
-            y2, m2 = imo2iym(r)
-    
-            # To be entirely faithful to the original Fortran PHA, we need to 
-            # slightly adjust the left bound in this segment. Unless the left 
-            # bound is the ultimate left bound on the difference series, then we
-            # want to exclude it from the computations on this segment, since it
-            # was included as a possible changepoint in the last segment. We
-            # will use the variable adjust to force this slight modification.
-            adjust = int(seg_bounds.index((l,r)) > 0)
-            segment = diff_data[l+adjust:r+1]
-            #numyr = r-l
-            
-        ## If there's less than min_ann years of data, then we can't handle the
-        ## statistical analysis here and we will short-circuit the computations
-        ## on this segment, proceeding to the next.
-            if (r-l) <= min_ann:
-                print "Too short: ", imo2iym(l), imo2iym(r)
-                continue
-            
-        ## If we've previously found that this segment is homogenous (has no
-        ## potential changepoint), then we can skip it as well and proceed to
-        ## the next one.
-            # Set the within() method to check if this segment is within any
-            # previously found homogenous ones. Use lambda, since we can't pass
-            # keyword or positional arguments to map().
-            within_this_seg = lambda seg: within((l, r), seg)
-            within_stable_segs = map(within_this_seg, homog_segs)
-            if any(within_stable_segs):
-                print "Stable segment: ", imo2iym(l), imo2iym(r)
-                if l == first: 
-                    new_breakpoints.append(first)
-                continue
-            
-        ## The standard normal homogeneity test - which is the statistical test
-        ## we'll use to see if there is a potential changepoint in this segment
-        ## - requires us to normalize our paired difference series. We can do
-        ## that in snht(), but we'll do it right now so we can inspect those
-        ## standardized values later.
-            z = standardize(segment, MISS)
-            
-        ## Apply standard normal homogeneity test. 
-        ## For mechanics, see Alexandersson and Moberg 1997, Int'l Jrnl of
-        ## Climatology (pp 25-34)
-            likelihood_ratios = snht(z, MISS, standardized=True)
-            z_count = len(get_valid_data(z))
-                    
-        ## We're left with the likelihood ratio for each value being a potential
-        ## changepoint. Find the max ratio, and if that value is significant, let
-        ## it be the newest potential changepoint.
-            ind_max_ratio = 0
-            max_ratio = 0.0
-            clip_ratios = likelihood_ratios[2:-2] # clip the beginning and end,
-                                                  # they can't be changepoints.
-            for (ind, ratio) in zip(xrange(len(clip_ratios)), clip_ratios):
-                if ratio > max_ratio:
-                    ind_max_ratio = ind
-                    max_ratio = ratio
-        ## Now we find the critical value for this data set, and check our max
-        ## likelihood ratio against it
-            crit_val = lrt_lookup(z_count)
-            
-            # The possible changepoint is the index of the max ratio we found. 
-            # We have to shift it the following ways to align it to the original
-            # data -
-            #    1) shift by 2 re-aligns it from clip_ratios to likelihood_ratios
-            #    2) shift by adjust re-aligns it to this segment in diff_data
-            #    3) shift by l re-aligns it to the first index in diff_data
-            possible_changepoint = l + ind_max_ratio + 2 + adjust
-            
-            y_new, m_new = imo2iym(possible_changepoint) # year, month
-            
-        ## If this is the first iteration, we indicate as such, and add the new
-        ## changepoint
-            if iter == 0: 
-                print "%6s-%6s MD        FIRST series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,y_new,m_new,max_ratio,crit_val)
-                breakpoints.append(possible_changepoint)
-                breakpoints = sorted(breakpoints)
-        
-            else:
-        ## Else, if we found a new possible changepoint, add it to our list.
-                if max_ratio > crit_val:
-                    print "%6s-%6s MD Inhomogenity for series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f %4d" % (id1,id2,y1,m1,y2,m2,y_new,m_new,max_ratio,crit_val,z_count)
-                    new_breakpoints.append(possible_changepoint)
-                    
-        ## If not, record that we found a homogeneous segment.   
-                else:
-                    print "%6s-%6s MD      Homogeneous series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f %4d" % (id1,id2,y1,m1,y2,m2,y_new,m_new,max_ratio,crit_val,z_count)
-                    new_homog_segs.append((l, r))
-        
-        ## Now we need to update our account of which segments were homogeneous,
-        ## because we need to know during the next iteration. We will do this,
-        ## as well as condense stable segments that lie adjacent to each other
-        ## i.e, if we have the segments [(1,5), (5, 10,),, (12, 15)], then we 
-        ## really have [(1,10), (12, 15)].
-        homog_segs.extend(new_homog_segs)
-        if homog_segs:
-            homog_segs = sorted(homog_segs, key=itemgetter(0))
-            final_homog_segs = [homog_segs[0], ] # this will be like a stack
-            for seg in homog_segs[1:]:
-                last_seg = final_homog_segs[-1]
-                if last_seg[1] == seg[0]:
-                    new_seg = (last_seg[0], seg[1])
-                    final_homog_segs.pop()
-                    final_homog_segs.append(new_seg)
-                else:
-                    final_homog_segs.append(seg)
-            homog_segs = final_homog_segs
-    
-        ## So we have new segments that can be generated from these new
-        ## breakpoints. Now, the PHA routine enters a "merge" process
-        ## to see whether or not to keep these newly found changepoints or throw
-        ## them out as false alarms. 
-        ##
-        ## We do this by "leapfrogging" every other breakpoint. This gives us
-        ## a set of segments that all have another breakpoint in them. We want
-        ## to see if these segments are homogeneous, because if they are, it
-        ## means that the breakpoint we previously found in the segment has 
-        ## been superseded.
-        new_breakpoints = sorted(new_breakpoints)
-        print new_breakpoints
-        seg_bounds = zip(new_breakpoints[:-2], new_breakpoints[2:])
-        print seg_bounds
-        
-        remove_breakpoints = set()
-        merged_breakpoints = set()
-        if iter > 0:
-            
-            print "Merge segments (isplit = 0), ipass: ", iter
-                        
-            for ((l ,r), new_bp) in zip(seg_bounds, new_breakpoints[1:-1]):
+            seg_bounds = zip(breakpoints[:-1], breakpoints[1:])
+            last_breakpoints = deepcopy(breakpoints)
+            new_breakpoints = deepcopy(breakpoints)
                 
-                print imo2iym(l), imo2iym(r)
-                
-                # short circuit and skip this segment if we already know that it's
-                # homogenous
-    #            this_within = lambda seg: within((l, r), seg)
-    #            within_stable_segs = map(this_within, homog_segs)
-    #            if any(within_stable_segs):
-    #                print "Stable segment: ", imo2iym(l), imo2iym(r)
-    #                if l == first: 
-    #                    new_breakpoints.append(first)
-    #                seg_lookup.append(((l, r), 'stable'))
-    #                continue
+            new_homog_segs = []
         
-        ## Apply the same adjustments and the same standard normal homogeneity
-        ## test that we did in the previous splitting process. There is no 
-        ## difference here until we consider what to do if we find a new 
-        ## homogeneous segment.
-                adjust = int(seg_bounds.index((l, r)) > 0)
+            print "Parse segments (isplit = 1), ipass: ", iter
+            print breakpoints
+            print seg_bounds
+            
+            #####################################################################
+            ## Loop over the segments we have just found and apply the 
+            ## semi-hierarchical splitting algorithm and a 5% significance level
+            ## to find where there is a split.
+            for (l, r) in seg_bounds:
+                
+                y1, m1 = imo2iym(l)
+                y2, m2 = imo2iym(r)
+        
+                # To be entirely faithful to the original Fortran PHA, we need to 
+                # slightly adjust the left bound in this segment. Unless the left 
+                # bound is the ultimate left bound on the difference series, then we
+                # want to exclude it from the computations on this segment, since it
+                # was included as a possible changepoint in the last segment. We
+                # will use the variable adjust to force this slight modification.
+                adjust = int(seg_bounds.index((l,r)) > 0)
                 segment = diff_data[l+adjust:r+1]
+                #numyr = r-l
                 
+            ## If there's less than min_ann years of data, then we can't handle the
+            ## statistical analysis here and we will short-circuit the computations
+            ## on this segment, proceeding to the next.
+                if (r-l) <= min_ann:
+                    print "Too short: ", imo2iym(l), imo2iym(r)
+                    continue
+                
+            ## If we've previously found that this segment is homogenous (has no
+            ## potential changepoint), then we can skip it as well and proceed to
+            ## the next one.
+                # Set the within() method to check if this segment is within any
+                # previously found homogenous ones. Use lambda, since we can't pass
+                # keyword or positional arguments to map().
+                within_this_seg = lambda seg: within((l, r), seg)
+                within_stable_segs = map(within_this_seg, homog_segs)
+                if any(within_stable_segs):
+                    print "Stable segment: ", imo2iym(l), imo2iym(r)
+                    if l == first: 
+                        new_breakpoints.append(first)
+                    continue
+                
+            ## The standard normal homogeneity test - which is the statistical test
+            ## we'll use to see if there is a potential changepoint in this segment
+            ## - requires us to normalize our paired difference series. We can do
+            ## that in snht(), but we'll do it right now so we can inspect those
+            ## standardized values later.
                 z = standardize(segment, MISS)
+                
+            ## Apply standard normal homogeneity test. 
+            ## For mechanics, see Alexandersson and Moberg 1997, Int'l Jrnl of
+            ## Climatology (pp 25-34)
                 likelihood_ratios = snht(z, MISS, standardized=True)
                 z_count = len(get_valid_data(z))
-                    
-                ind_max_ratio = 0.0
+                        
+            ## We're left with the likelihood ratio for each value being a potential
+            ## changepoint. Find the max ratio, and if that value is significant, let
+            ## it be the newest potential changepoint.
+                ind_max_ratio = 0
                 max_ratio = 0.0
-                clip_ratios = likelihood_ratios[2:-2] # We clip the beginning and end
+                clip_ratios = likelihood_ratios[2:-2] # clip the beginning and end,
+                                                      # they can't be changepoints.
                 for (ind, ratio) in zip(xrange(len(clip_ratios)), clip_ratios):
                     if ratio > max_ratio:
                         ind_max_ratio = ind
                         max_ratio = ratio
-                        
+            ## Now we find the critical value for this data set, and check our max
+            ## likelihood ratio against it
                 crit_val = lrt_lookup(z_count)
+                
+                # The possible changepoint is the index of the max ratio we found. 
+                # We have to shift it the following ways to align it to the original
+                # data -
+                #    1) shift by 2 re-aligns it from clip_ratios to likelihood_ratios
+                #    2) shift by adjust re-aligns it to this segment in diff_data
+                #    3) shift by l re-aligns it to the first index in diff_data
                 possible_changepoint = l + ind_max_ratio + 2 + adjust
                 
-                y_new, m_new = imo2iym(possible_changepoint)
+                y_new, m_new = imo2iym(possible_changepoint) # year, month
                 
-        ## If we found a new breakpoint that is statistically significant, then
-        ## great! Let's keep it.
-                if max_ratio > crit_val:
-                    print "%6s-%6s MD  Peak kept in merge at %4d %2d | ts: %4.2f limit >: %3.2f" % (id1,id2,y_new,m_new,max_ratio,crit_val)
-                    merged_breakpoints.add(l)
-                    merged_breakpoints.add(new_bp)
-                    merged_breakpoints.add(r)
-        ## If not, then this segment was homogeneous, so the breakpoint which
-        ## already exists in it is no good.
+            ## If this is the first iteration, we indicate as such, and add the new
+            ## changepoint
+                if iter == 0: 
+                    print "%6s-%6s MD        FIRST series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f" % (id1,id2,y1,m1,y2,m2,y_new,m_new,max_ratio,crit_val)
+                    breakpoints.append(possible_changepoint)
+                    breakpoints = sorted(breakpoints)
+            
                 else:
-                    print "%6s-%6s MD Compress 2 out peak at %4d %2d | ts: %4.2f limit >: %3.2f" % (id1,id2,y_new,m_new,max_ratio,crit_val)
-                    # Crap, if there are any potential breakpoints in this segment,
-                    # we need to remove them because this segment is homogeneous. Let's
-                    # remember this homogeneous segment for now and come back once
-                    # we've found all of them.    
-                    merged_breakpoints.update([l, r])
-                    remove_breakpoints.add(new_bp)
+            ## Else, if we found a new possible changepoint, add it to our list.
+                    if max_ratio > crit_val:
+                        print "%6s-%6s MD Inhomogenity for series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f %4d" % (id1,id2,y1,m1,y2,m2,y_new,m_new,max_ratio,crit_val,z_count)
+                        new_breakpoints.append(possible_changepoint)
+                        
+            ## If not, record that we found a homogeneous segment.   
+                    else:
+                        print "%6s-%6s MD      Homogeneous series %4d %2d to %4d %2d | at %4d %2d ts: %4.2f limit >: %3.2f %4d" % (id1,id2,y1,m1,y2,m2,y_new,m_new,max_ratio,crit_val,z_count)
+                        new_homog_segs.append((l, r))
+            
+            ## Now we need to update our account of which segments were homogeneous,
+            ## because we need to know during the next iteration. We will do this,
+            ## as well as condense stable segments that lie adjacent to each other
+            ## i.e, if we have the segments [(1,5), (5, 10,),, (12, 15)], then we 
+            ## really have [(1,10), (12, 15)].
+            homog_segs.extend(new_homog_segs)
+            if homog_segs:
+                homog_segs = sorted(homog_segs, key=itemgetter(0))
+                final_homog_segs = [homog_segs[0], ] # this will be like a stack
+                for seg in homog_segs[1:]:
+                    last_seg = final_homog_segs[-1]
+                    if last_seg[1] == seg[0]:
+                        new_seg = (last_seg[0], seg[1])
+                        final_homog_segs.pop()
+                        final_homog_segs.append(new_seg)
+                    else:
+                        final_homog_segs.append(seg)
+                homog_segs = final_homog_segs
         
-        ## At this point, we have a set of all the breakpoints we've accumulated
-        ## during this iteration of split/merge, as well as a set of breakpoints
-        ## which we've found to be of no further use. We can difference update
-        ## our set of breakpoints to remove these guys, and let those merged
-        ## breakpoints be the set of newest breakpoints for the next splitmerge
-        ## iteration.
-            merged_breakpoints.difference_update(remove_breakpoints)
-            breakpoints = list(merged_breakpoints)
-        
-        breakpoints = sorted(breakpoints)
-        
-        ## Did we actually find new breakpoints? If not, then we're done
-        ## with splitmerge and can move on to the BIC process.
-        enter_BIC = (breakpoints == last_breakpoints)
-        iter = iter + 1
-        
-    ## Okay wow, we've potentially made it to the BIC stage now... !
-    if first not in breakpoints:
-        breakpoints.insert(0, first)
-    ym_breakpoints = map(imo2iym, breakpoints)
-    print ym_breakpoints
-    
-    ## ENTERING MINBIC    
-    bp_dictionary = dict()
-    for left,bp,right in zip(breakpoints[0:], breakpoints[1:], breakpoints[2:]):
+            ## So we have new segments that can be generated from these new
+            ## breakpoints. Now, the PHA routine enters a "merge" process
+            ## to see whether or not to keep these newly found changepoints or throw
+            ## them out as false alarms. 
+            ##
+            ## We do this by "leapfrogging" every other breakpoint. This gives us
+            ## a set of segments that all have another breakpoint in them. We want
+            ## to see if these segments are homogeneous, because if they are, it
+            ## means that the breakpoint we previously found in the segment has 
+            ## been superseded.
+            new_breakpoints = sorted(new_breakpoints)
+            print new_breakpoints
+            seg_bounds = zip(new_breakpoints[:-2], new_breakpoints[2:])
+            print seg_bounds
+            
+            remove_breakpoints = set()
+            merged_breakpoints = set()
+            if iter > 0:
                 
-        if left != first:
-            left = left + 1
-        # recall that we only consider data after the first full year. we will be 
-        # computing regressions with the independent variable indexed from this 
-        # starting point, so we need to shift these indices. we also need to shift them
-        # by +1 if this is any segment beyond the first one, so that we don't include
-        # changepoints in more than one analysis.
-        # TOTAL_SHIFT = -12 + 1 = -11
-        # 
-        # However, this shift is only necessary while looking at the array indices that
-        # we generate using range(). the data should already be aligned correctly.
-        total_shift = -12 + 1
-        left_shift, bp_shift, right_shift = left+total_shift, bp+total_shift, right+total_shift
-        y1, m1 = imo2iym(left)
-        yb, mb = imo2iym(bp)
-        y2, m2 = imo2iym(right)
-        print "Entering MINBIC - %4d %2d    %4d %2d    %4d %2d" % (y1, m1, yb,
-                                                                   mb, y2, m2)
-        (seg_x, seg_data) = range(left_shift, right_shift+1), diff_data[left:right+1]
-        bp_index = bp-left
-        bp_analysis = minbic(seg_x, seg_data, bp_index, MISS)
+                print "Merge segments (isplit = 0), ipass: ", iter
+                            
+                for ((l ,r), new_bp) in zip(seg_bounds, new_breakpoints[1:-1]):
+                    
+                    print imo2iym(l), imo2iym(r)
+                    
+    #                # short circuit and skip this segment if we already know that it's
+    #                # homogenous
+    #                this_within = lambda seg: within((l, r), seg)
+    #                within_stable_segs = map(this_within, homog_segs)
+    #                if any(within_stable_segs):
+    #                    print "Stable segment: ", imo2iym(l), imo2iym(r)
+    #                    if l == first: 
+    #                        new_breakpoints.append(first)
+    #                    seg_lookup.append(((l, r), 'stable'))
+    #                    continue
+                    # Set the within() method to check if this segment is within any
+                    # previously found homogenous ones. Use lambda, since we can't pass
+                    # keyword or positional arguments to map().
+                    within_this_seg = lambda seg: within((l, r), seg)
+                    within_stable_segs = map(within_this_seg, homog_segs)
+                    if any(within_stable_segs):
+                        print "Stable segment: ", imo2iym(l), imo2iym(r)
+                        #if l == first: 
+                        #    new_breakpoints.append(first)
+                        merged_breakpoints.update([l, r])
+                        continue
+            
+            ## Apply the same adjustments and the same standard normal homogeneity
+            ## test that we did in the previous splitting process. There is no 
+            ## difference here until we consider what to do if we find a new 
+            ## homogeneous segment.
+                    adjust = int(seg_bounds.index((l, r)) > 0)
+                    segment = diff_data[l+adjust:r+1]
+                    
+                    z = standardize(segment, MISS)
+                    likelihood_ratios = snht(z, MISS, standardized=True)
+                    z_count = len(get_valid_data(z))
+                        
+                    ind_max_ratio = 0
+                    max_ratio = 0.0
+                    clip_ratios = likelihood_ratios[2:-2] # We clip the beginning and end
+                    for (ind, ratio) in zip(xrange(len(clip_ratios)), clip_ratios):
+                        if ratio > max_ratio:
+                            ind_max_ratio = ind
+                            max_ratio = ratio
+                            
+                    crit_val = lrt_lookup(z_count)
+                    possible_changepoint = l + ind_max_ratio + 2 + adjust
+                    
+                    y_new, m_new = imo2iym(possible_changepoint)
+                    
+    
+                    if z_count < 2:
+                        y1, m1 = imo2iym(l)
+                        y2, m2 = imo2iym(r)
+                        print "%6s-%6s MD  No found peaks %4d %2d to %4d %2d" % (id1,id2,y1,m1,y2,m2)
+                        print "%6s-%6s MD  Compress 1 out peak at %4d %2d" % (id1,id2,y_new,m_new)
+                        #remove_breakpoints.add_
+            ## If we found a new breakpoint that is statistically significant, then
+            ## great! Let's keep it.
+                    if max_ratio > crit_val:
+                        print "%6s-%6s MD  Peak kept in merge at %4d %2d | ts: %4.2f limit >: %3.2f" % (id1,id2,y_new,m_new,max_ratio,crit_val)
+                        merged_breakpoints.add(l)
+                        merged_breakpoints.add(new_bp)
+                        merged_breakpoints.add(r)
+            ## If not, then this segment was homogeneous, so the breakpoint which
+            ## already exists in it is no good.
+                    else:
+                        print "%6s-%6s MD Compress 2 out peak at %4d %2d | ts: %4.2f limit >: %3.2f" % (id1,id2,y_new,m_new,max_ratio,crit_val)
+                        # Crap, if there are any potential breakpoints in this segment,
+                        # we need to remove them because this segment is homogeneous. Let's
+                        # remember this homogeneous segment for now and come back once
+                        # we've found all of them.    
+                        merged_breakpoints.update([l, r])
+                        remove_breakpoints.add(new_bp)
+            
+            ## At this point, we have a set of all the breakpoints we've accumulated
+            ## during this iteration of split/merge, as well as a set of breakpoints
+            ## which we've found to be of no further use. We can difference update
+            ## our set of breakpoints to remove these guys, and let those merged
+            ## breakpoints be the set of newest breakpoints for the next splitmerge
+            ## iteration.
+                merged_breakpoints.difference_update(remove_breakpoints)
+                breakpoints = list(merged_breakpoints)
+            
+            breakpoints = sorted(breakpoints)
+            
+            ## Did we actually find new breakpoints? If not, then we're done
+            ## with splitmerge and can move on to the BIC process.
+            enter_BIC = (breakpoints == last_breakpoints)
+            iter = iter + 1
+            
+        ## Okay wow, we've potentially made it to the BIC stage now... !
+        if first not in breakpoints:
+            breakpoints.insert(0, first)
+        ym_breakpoints = map(imo2iym, breakpoints)
+        print ym_breakpoints
         
-        bp_dictionary[bp] = bp_analysis    
-        
-    ##################################3
-    ## Final stage - print the adjustment summaries
-    sorted_bps = sorted(bp_dictionary.keys())
-    for bp in sorted_bps:
-        stats = bp_dictionary[bp]
-        
-        iqtype=stats['iqtype']
-        asigx=stats['asigx']
-        azscr=stats['azscr']
-        rslp=stats['rslp']
-        
-        end1 = bp
-        y_end1, m_end1 = imo2iym(bp)
-        beg2 = bp+1
-        y_beg2, m_beg2 = imo2iym(bp+1)
-        
-        print ("%6s-%6s  --  -- MD TESTSEG ADJ: %7.2f %7.2f %8.4f %8.4f %5d %5d %3d %5d %5d %3d %2d" % 
-               (id1,id2, asigx, azscr, rslp[0], rslp[1], end1, y_end1, m_end1, beg2, y_beg2, m_beg2, iqtype))
-        
-        
+        ## ENTERING MINBIC    
+        bp_dictionary = dict()
+        for left,bp,right in zip(breakpoints[0:], breakpoints[1:], breakpoints[2:]):
+                    
+            if left != first:
+                left = left + 1
+            # recall that we only consider data after the first full year. we will be 
+            # computing regressions with the independent variable indexed from this 
+            # starting point, so we need to shift these indices. we also need to shift them
+            # by +1 if this is any segment beyond the first one, so that we don't include
+            # changepoints in more than one analysis.
+            # TOTAL_SHIFT = -12 + 1 = -11
+            # 
+            # However, this shift is only necessary while looking at the array indices that
+            # we generate using range(). the data should already be aligned correctly.
+            total_shift = -12 + 1
+            left_shift, bp_shift, right_shift = left+total_shift, bp+total_shift, right+total_shift
+            y1, m1 = imo2iym(left)
+            yb, mb = imo2iym(bp)
+            y2, m2 = imo2iym(right)
+            print "Entering MINBIC - %4d %2d    %4d %2d    %4d %2d" % (y1, m1, yb,
+                                                                       mb, y2, m2)
+            (seg_x, seg_data) = range(left_shift, right_shift+1), diff_data[left:right+1]
+            bp_index = bp-left
+            #print len(seg_x), len(seg_data), bp_index
+            bp_analysis = minbic(seg_x, seg_data, bp_index, MISS)
+            
+            bp_dictionary[bp] = bp_analysis    
+            
+        ##################################3
+        ## Final stage - print the adjustment summaries
+        sorted_bps = sorted(bp_dictionary.keys())
+        for bp in sorted_bps:
+            stats = bp_dictionary[bp]
+            
+            cmodel=stats['cmodel']
+            iqtype=stats['iqtype']
+            asigx=stats['offset']
+            azscr=stats['offset_z']
+            rslp=stats['slopes']
+            
+            end1 = bp
+            y_end1, m_end1 = imo2iym(end1)
+            beg2 = bp+1
+            y_beg2, m_beg2 = imo2iym(beg2)
+            
+            # If cmodel is *SLR1, then there is no breakpoint
+            if 'SLR1' in cmodel:
+                print ("%s-%s  --  -- MD TESTSEG SKIP: %7.2f %5d %5d %3d %5d %5d %3d" %
+                       (id1, id2, asigx, end1, y_end1, m_end1, beg2, y_beg2, m_beg2))
+            else:
+                print ("%6s-%6s  --  -- MD TESTSEG ADJ: %7.2f %7.2f %8.4f %8.4f %5d %5d %3d %5d %5d %3d %2d" % 
+                       (id1,id2, asigx, azscr, rslp[0], rslp[1], end1, y_end1, m_end1, beg2, y_beg2, m_beg2, iqtype))
+    
+    pair_results[pair_str] = bp_dictionary
+            
             

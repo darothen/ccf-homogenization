@@ -533,10 +533,10 @@ c         and the model type has not been changed to slr0 or slr1
         iprocess = 0
         if(method .eq. 3) then
           iprocess = 1
-          print *,"top"
+c          print *,"top"
         else if(inhstns(ichg) .ne. 3 .and. modtype .ge. 3) then
           iprocess = 1
-          print *,"bottom",modtype
+c          print *,"bottom",modtype
 c         test the incoming stattest (inqtype) against the best minbic 
 c           data model (modtype). The following compatibilities are assumed:
 c            inqtype    modtype
@@ -549,15 +549,15 @@ c          if(inqtype .eq. 3 .and. modtype .ne. 3) then
 c         V21F modification - ALLOW ALL TPR MODELS FOR TPR0
           if(inqtype .eq. 3 .and. modtype .lt. 3) then
             iprocess = 0
-            print *,'first',inqtype,modtype
+c            print *,'first',inqtype,modtype
           else if(inqtype .eq. 4) then
             if(modtype .ne. 3 .and. modtype .ne. 4) then
                iprocess = 0
-               print *,'second',inqtype,modtype
+c               print *,'second',inqtype,modtype
             endif 
           else if(inqtype .eq. 5 .and. modtype .lt. 3) then
             iprocess = 0
-            print *,'third',inqtype,modtype
+c            print *,'third',inqtype,modtype
           endif  
         endif  
         if(iprocess .eq. 0) then
@@ -853,7 +853,8 @@ c            Tmax or Fmax test for a full segment
             StatTest = homog
             if(isplit .eq. 0) then
               if(idebug .ge. 2) 
-     *         write(6,'(a," ",a," Compress 1 out peak at ",2f7.2," ")')
+c     *         write(6,'(a," ",a," Compress 1 out peak at ",2f7.2," ")')
+     *         write(6,'(a," ",a," Compress 1 out peak at ",i4,i3," ")')
      *          subnet(1), otag, iyrb, imthb
 c             for merging, this is a change (collapse)
               goto 200

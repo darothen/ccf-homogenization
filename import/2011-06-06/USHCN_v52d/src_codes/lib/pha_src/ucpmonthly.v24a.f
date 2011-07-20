@@ -1124,6 +1124,10 @@ c                     No link back in paired stn
    50           enddo ! end do all neighbors
    55         enddo ! end do all candidates
 
+c    !!!!!! Daniel
+c            call exit()
+c
+
             else if(method .eq. 2) then
 c           --------------- Composite Reference Method (#2) ------------------
 c           ****** Abandoned as of ucpdriver.v1 - kept "just-in-case" ********

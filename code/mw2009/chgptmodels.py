@@ -7,6 +7,11 @@
 """Port of functions necessary for identifying and classifying changepoint
 model types during splitmerge process
 
+GLOSSARY OF ABBREVIATIONS -
+
+BIC - Bayes Information Criterion; test statistic for evaluating test statistics
+KTH - Kendall-Theill robust line fit method
+
 """
 __docformat__ = "restructuredtext"
 
@@ -17,19 +22,6 @@ from operator import itemgetter
 
 # ccf-homogenization imports
 from util import compute_mean, get_valid_data, compute_std
-
-# Possible models to fit to changepoints
-minbic_models = [
-                 # Homogeneous linear types -
-                 'KTHSLR0', # simple flat line
-                 'KTHSLR1', # sloped straight line
-                 # Two phase regression types - 
-                 'KTHTPR0', # amplitude only, 0 sloped segments (step change)
-                 'KTHTPR1', # amplitude shift with equal sloped segments
-                 'KTHTPR2', # amplitude shift with non-equal sloped segments
-                 'KTHTPR3', # amplitude shift with flat-to-slope segments
-                 'KTHTPR4', # amplitude shift with slope-to-flat segments  
-                 ]
 
 class Stats(dict):
     """Base object for returning results of statistical tests.
@@ -128,8 +120,11 @@ def kth_line(x, y, missing_val=-9999):
     assert len(x) == len(y)
     
     # fcn to determine whether a value in a pair is invalid
-    valid_pair = lambda pair: ((pair[0] != missing_val) and 
-                               (pair[1] != missing_val))
+    def valid_pair(pair, missing_val=-9999):
+        """Given a 2-tuple, returns False if either of the values are equal
+        to the supplied missing_val.
+        """
+        return ( (pair[0] != missing_val))
     
     pairs = zip(x, y)
     # Filter out data pairs where either x_i or y_i equal missing_val
@@ -317,7 +312,7 @@ def lookup_critical(n, stat="t"):
         
         return (crit_left + slope*(n-thresh_left))
 
-def minbic(x, y, bp_index, missing_val=-9999):
+def minbic(x, y, bp_index, missing_val=-9999, models=None):
     """Performs a changepoint-detection analysis to classify a suspected
     changepoint as one of a pre-specified list of models (minbic_models, above).
     
@@ -348,10 +343,45 @@ def minbic(x, y, bp_index, missing_val=-9999):
         The index of the suspected changepoint in the x and y datasets.
     :Param missing_val:
         (optional) The placeholder for missing values in the datasets.
+    :Param models:
+        The list of potential model types and analysis functions. Should be 
+        passed as a list of 2-tuples. The first element in each tuple should be
+        the model name as a string; the second element should be the function
+        to call to analyze this model.
     :Return:
-    
+        A dictionary containing the results of this analysis with the following
+        fields:
+        :Param cmodel:
+            The name of the changepoint model, as a string
+        :Param iqtype:
+            The type of changepoint model, as an integer. Corresponds to the
+            order that models was passed to this function.
+        :Params offset, offset_z:
+            The amplitude change at the breakpoint and the z-score of this 
+            change based on the model error.
+        :Param slopes:
+            A two-element tuple containing the slope of the regression fit to
+            the left and right segments of the data.
+            
     """    
     
+    ## Figure out what changepoint models to test for. A default is defined
+    ## here if no models were specified by the user.
+    if not models:
+        models = ( 
+                # Homogeneous linear types -
+                   #('KTHSLR0', kthslr0) # simple flat line
+                    ('KTHSLR1', kthslr1), # sloped straight line
+                 # Two phase regression types - 
+                    ('KTHTPR0', kthtpr0), # amplitude only, 0 sloped segments (step change)
+                    ('KTHTPR1', kthtpr1), # amplitude shift with equal sloped segments
+                    ('KTHTPR2', kthtpr2), # amplitude shift with non-equal sloped segments
+                    ('KTHTPR3', kthtpr3), # amplitude shift with flat-to-slope segments
+                    ('KTHTPR4', kthtpr4), # amplitude shift with slope-to-flat segments  
+                 )
+    model_order, model_fcns = zip(*models)
+        
+    # Sanity check that we have a good batch of data
     assert len(y) == len(x)
 
     ## Print header for BIC changepoint testing -
@@ -372,47 +402,187 @@ def minbic(x, y, bp_index, missing_val=-9999):
     # For storing the results of these tests.
     changepoint_dict = dict()
     
-    ############################################################################
-    ## TEST 1 - KTHSLR1, Sloped straight line
-    ##    Method - Use Kendall-Theill method to compute a linear regression to
-    ##            all of the data. We tacitly assume this model as the null
-    ##            hypothesis; we must reject this model in order to accept one
-    ##            of the more-complicated ones to follow.
-    def kthslr1(x, y, bp_index, vals, missing_val=-9999):
-        cmodel = "KTHSLR1"
-        kth_regression = kth_line(x, y, missing_val)
-        
-        num_obs =  len(x) # total number of observations
-        n_vals = kth_regression.nval # number of non-missing observations
-        slope = kth_regression.slope
-        y_int = kth_regression.y_int
-        sse_resid = kth_regression.sseslope
-        amp_est = 0.0
-        
-        # Bayes Info Criterion - total, due to error in variance, and penalty
-        b_tot, b_err, b_pen = bayes(num_obs, sse_resid, 2)
-        # output string
-        head = "%7s %6.2f %7.2f %7.2f" % (cmodel, b_tot, b_err, b_pen)
-        stats =  " %7.2f ------- %7.3f ------- ------- -------" % (y_int, slope)
-        tail = " %7.2f %5d ----" % (amp_est, n_vals)
-        print (head+stats+tail)
-        
-        ## Record the results of this test
-        changepoint_dict[cmodel] = dict(bic=b_tot, 
-                                        mu=[y_int, y_int],
-                                        alpha=[slope, slope], 
-                                        sse_bic=(sse_resid/n_vals),
-                                        seg_lens=[n_vals, 0],
-                                        test_stat=0.0,
-                                        crit_val=0.0,
-                                        amp_est=amp_est) 
+    ## Loop over the models we're using to classify this breakpoint and perform
+    ## the specified analysis
+    for (cmodel, test_fcn) in models:
+        result, vals = test_fcn(x, y, bp_index, vals, missing_val)
+        changepoint_dict[cmodel] = result
+       
+    ############################################################################ 
+    ## We've finished the basic TPR tests. The PHA has loop-back criteria
+    ## which could cause the code to double back and compute these test
+    ## statistics over again or with subtle variations. I'll come back to
+    ## that...
+    ##
+    ## For now, let's look at the test results and pick the most likely
+    ## changepoint class based on the minimum BIC value found
+    results = [(cmodel, changepoint_dict[cmodel]['bic']) for cmodel in changepoint_dict]
+    results = sorted(results, key=itemgetter(1))
     
-    ############################################################################  
-    ## TEST 2 - KTHTPR0, Amplitude change, no slope change
-    ##    Method - Use Kendall-Theill method to compute a linear regression to
-    ##            the segments on either side of the suspected break point. Then,
-    ##            applies a student's t-test to see whether or not the mean in
-    ##            either segment is different from the other.
+    kthl_left = vals.left_kth_regress
+    kthl_right = vals.right_kth_regress
+    
+    cmodel, bic = results[0]
+    output = changepoint_dict[cmodel]
+    
+    ############################################################################ 
+    ## Debug printing for comparison to Fortran PHA        
+    iqtype = model_order.index(cmodel) + 2
+    sse_bic=output['sse_bic']
+    mu=output['mu']
+    slp=output['alpha']
+    test_stat=output['test_stat']
+    crit_val=output['crit_val']
+    offset=output['amp_est']
+    seg_lens=output['seg_lens']
+    
+    print ("Post: - %2d %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %5d %5d" %
+           (iqtype, bic, sse_bic, mu[0], mu[1], slp[0], slp[1], test_stat, crit_val, offset,
+            seg_lens[0], seg_lens[1]) )
+    ############################################################################ 
+    
+    ## Now we can double-check the analysis results and return them
+    # The slopes from each left/right segment
+    slopes = [kthl_left.slope, kthl_right.slope] 
+    # The amplitude change. We need to use the simple one from 'KTHTPR0' if a
+    # more complex two-phase regression was the best fit.
+    if 'TPR' in cmodel:
+        offset = vals.tpr_offset
+    else:
+        offset = output['amp_est']
+    # Z-score for offset, normalized about the sum square error of the residuals
+    # of hte model fit.
+    offset_z = offset/sse_bic
+    
+    ## Store information about this breakpoint and its crucial stats
+    return dict(cmodel=cmodel, iqtype=iqtype, offset=offset, offset_z=offset_z, 
+                slopes=slopes)
+
+def kthslr1(x, y, bp_index, vals, missing_val=-9999):
+    """KTHSLR1, Sloped straight line test
+    
+    Utilizes the Kendall-Theill method to compute a linear regression on all
+    the given data. With this regression, it computes the error for this test
+    as the sum square error of modeled residuals.
+    
+    :Params x, y:
+        The predictor and predictand datasets as lists of floats. The length of
+        x and y must be the same size, but the values may contain an arbitrary
+        number of missing values as specified by missing_val.
+    :Param bp_index:
+        The index of the suspected changepoint in the data.
+    :Param vals:
+        A 'Values' object for storing important intermediate values from the 
+        computations during this test. This test does not require vals to 
+        contain any previously computed values.
+    :Param missing_val:
+        (optional) The placeholder value for missing values.
+    :Returns:
+        result, a dictionary with the following fields:
+            cmodel - the name of the test ('KTHSLR1')
+            bic - the Bayes Information Criterion statistic for this analysis
+            mu - a 2-value tuple with the y-intercepts of the regression here
+            alpha - a 2-value tuple with the computed slopes of the regressions 
+                here
+            sse_bic - the sum square error on the computed BIC value
+            seg_lens - a 2-value tuple with the length of the segments in the 
+                regressions here
+            test_stat - the test statistic value computed here
+            crit_val - the 95% critical value for that test statistic
+            amp_est - an estimate of the changepoint amplitude
+        vals, the original 'Values' object provided to this method with the
+            following modifications:
+            added vals.sse_resid - the sum square error on the residuals from this
+                regression
+            added vals.n_vals - the number of valid (x, y) pairs found found in
+                the regression here
+            added vals.all_kth_regress - the regression results when the kth
+                method was used to fit a linear regression to all the (x, y) data.
+                
+    """
+    cmodel = "KTHSLR1"
+    kth_regression = kth_line(x, y, missing_val)
+    
+    num_obs =  len(x) # total number of observations
+    n_vals = kth_regression.nval # number of non-missing observations
+    slope = kth_regression.slope
+    y_int = kth_regression.y_int
+    sse_resid = kth_regression.sseslope
+    amp_est = 0.0
+    
+    # Bayes Info Criterion - total, due to error in variance, and penalty
+    b_tot, b_err, b_pen = bayes(num_obs, sse_resid, 2)
+    # output string
+    head = "%7s %6.2f %7.2f %7.2f" % (cmodel, b_tot, b_err, b_pen)
+    stats =  " %7.2f ------- %7.3f ------- ------- -------" % (y_int, slope)
+    tail = " %7.2f %5d ----" % (amp_est, n_vals)
+    print (head+stats+tail)
+    
+    ## Record the results of this test
+    result = dict(cmodel=cmodel,
+                  bic=b_tot, 
+                  mu=[y_int, y_int],
+                  alpha=[slope, slope], 
+                  sse_bic=(sse_resid/n_vals),
+                  seg_lens=[n_vals, 0],
+                  test_stat=0.0,
+                  crit_val=0.0,
+                  amp_est=amp_est)
+    
+    ## Add the important intermediate values from this analysis to our
+    ## 'vals' object
+    vals.sse_resid = sse_resid
+    vals.n_vals = n_vals
+    vals.all_kth_regress = kth_regression
+    
+    return result, vals
+
+def kthtpr0(x, y, bp_index, vals, missing_val=-9999):
+    """KTHTPR0, Amplitude change, no slope change
+    
+    Utilizes the Kendall-Theill method to compute a linear regression on the 
+    data segments on each side of the suspected breajpoint. Then, applies a
+    student's t-test to see whether the mean value for the two segments differs.
+    
+    :Params x, y:
+        The predictor and predictand datasets as lists of floats. The length of
+        x and y must be the same size, but the values may contain an arbitrary
+        number of missing values as specified by missing_val.
+    :Param bp_index:
+        The index of the suspected changepoint in the data.
+    :Param vals:
+        A 'Values' object for storing important intermediate values from the 
+        computations during this test. This test does not require vals to 
+        contain any previously computed values.
+    :Param missing_val:
+        (optional) The placeholder value for missing values.
+    :Returns:
+        result, a dictionary with the following fields:
+            cmodel - the name of the test
+            bic - the Bayes Information Criterion statistic for this analysis
+            mu - a 2-value tuple with the y-intercepts of the regression here
+            alpha - a 2-value tuple with the computed slopes of the regressions 
+                here
+            sse_bic - the sum square error on the computed BIC value
+            seg_lens - a 2-value tuple with the length of the segments in the 
+                regressions here
+            test_stat - the test statistic value computed here
+            crit_val - the 95% critical value for that test statistic
+            amp_est - an estimate of the changepoint amplitude
+        vals, the original 'Values' object provided to this method with the
+            following modifications:
+            added vals.left_kth_regress - the regression fit on the left 
+                segment of data
+            added vals.n_left - the number of valid (x, y) data pairs in the 
+                left segment of data
+            added vals.right_kth_regress - the regression fit on the right 
+                segment of data
+            added vals.n_right - the number of valid (x, y) data pairs in the 
+                right segment of data.
+            added vals.tpr_offset - the step change difference in the mean from
+                the left to the right segments of data
+                
+    """
     cmodel = "KTHTPR0"
     
     # Divide the segment before/after the suspect breakpoint
@@ -449,28 +619,67 @@ def minbic(x, y, bp_index, missing_val=-9999):
     tail = "% 7.2f %5d %4d" % (amp_est, n_left, n_right)
     print (head+stats+tail)
     
-    ## add to results dictionary
-    changepoint_dict[cmodel] = dict(bic=b_tot, 
-                                    mu=[left_y_med, right_y_med],
-                                    alpha=[0.0, 0.0],
-                                    sse_bic=sqrt(sse_sum/n_total),
-                                    seg_lens=[n_left, n_right],
-                                    test_stat=t_val,
-                                    crit_val=t_crit,
-                                    amp_est=amp_est)
+    ## Record the results of this test
+    result = dict(cmodel=cmodel,
+                  bic=b_tot, 
+                  mu=[left_y_med, right_y_med],
+                  alpha=[0.0, 0.0],
+                  sse_bic=sqrt(sse_sum/n_total),
+                  seg_lens=[n_left, n_right],
+                  test_stat=t_val,
+                  crit_val=t_crit,
+                  amp_est=amp_est)
     
-    ############################################################################  
-    ## TEST 3 - KTHTPR1, Amplitude change, equal slope segments
-    ##    Method - Use Kendall-Theill method to compute the slope for the entire
-    ##            data segment, and use that but coupled with independent 
-    ##            y-intercepts for the left/right segments to find residuals
-    ##            and error terms.
-    ##
-    ##    Note - This part of the code does a lot of heavy lifting which comes
-    ##            in handy when analyzing the subsequent changepoint models. 
-    ##            The various computations are documented here; the next models
-    ##            will indicate when they borrow results from this segment of
-    ##            the code.
+    ## Add the important intermediate values from this analysis to our
+    ## 'vals' object
+    vals.left_kth_regress = kthl_left
+    vals.n_left = n_left
+    vals.right_kth_regress = kthl_right
+    vals.n_right = n_right
+    vals.tpr_offset = amp_est
+    
+    return result, vals
+
+def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
+    """KTHTPR1, Amplitude change, equal slope segments
+    
+    Utilizes the Kendall-Theill method to compute a linear regression on the 
+    data segments on each side of the suspected breajpoint. Then, assuming the
+    slope on each segment is equal, computes errors from the modeled residuals
+    on each segment.
+    
+    :Params x, y:
+        The predictor and predictand datasets as lists of floats. The length of
+        x and y must be the same size, but the values may contain an arbitrary
+        number of missing values as specified by missing_val.
+    :Param bp_index:
+        The index of the suspected changepoint in the data.
+    :Param vals:
+        A 'Values' object for storing important intermediate values from the 
+        computations during this test. This test requires vals to already 
+        contain to values:
+            vals.sse_resid - the sum square error on the residuals computed by
+                fitting a linear regression on the entire dataset
+            vals.n_vals - the number of valid (x, y) pairs given by the user
+    :Param missing_val:
+        (optional) The placeholder value for missing values.
+    :Returns:
+        result, a dictionary with the following fields:
+            cmodel - the name of the test
+            bic - the Bayes Information Criterion statistic for this analysis
+            mu - a 2-value tuple with the y-intercepts of the regression here
+            alpha - a 2-value tuple with the computed slopes of the regressions 
+                here
+            sse_bic - the sum square error on the computed BIC value
+            seg_lens - a 2-value tuple with the length of the segments in the 
+                regressions here
+            test_stat - the test statistic value computed here
+            crit_val - the 95% critical value for that test statistic
+            amp_est - an estimate of the changepoint amplitude
+        vals, the original 'Values' object provided to this method with no
+            modifications.
+                
+    """
     cmodel = "KTHTPR1"
     
     all_data = y
@@ -600,7 +809,7 @@ def minbic(x, y, bp_index, missing_val=-9999):
     # segments. We can carry on the model test.
     r_mu = (left_y_int, right_y_int)
     r_alpha = slope_est
-    sse_resid = r_sum_sqr_e
+    sse_seg_resid = r_sum_sqr_e
     
     # 3) Now it looks like we compute residuals for all our data using
     # the models attained above. I'm not sure why the PHA does this - it seems
@@ -639,12 +848,16 @@ def minbic(x, y, bp_index, missing_val=-9999):
     # statistic necessitates us to recall the error on the residuals we got
     # in KTHSLR1, when we assumed that there *was not* a change in slope at 
     # the suspected breakpoint
-    f_val = ((sse_resid-sse_total)/1.)/(sse_total/(count-3))
+    f_val = ((vals.sse_resid-sse_total)/1.)/(sse_total/(count-3))
     f_crit = lookup_critical(count-3, "f1")
     b_tot, b_err, b_pen = bayes(count, sse_total, 4)
     # amplitude change estimate
-    y1 = r_mu[0] + r_alpha * range_all[bp_index+1] # end of left seg
-    y2 = r_mu[1] + r_alpha * range_all[bp_index+2] # beg of right seg
+    print r_mu, r_alpha, bp_index
+    print len(range_all)
+    #y1 = r_mu[0] + r_alpha * range_all[bp_index+1] # end of left seg
+    #y2 = r_mu[1] + r_alpha * range_all[bp_index+2] # beg of right seg
+    y1 = r_mu[0] + r_alpha * range_left[-1]
+    y2 = r_mu[1] + r_alpha * range_right[0]
     amp_est = y1-y2
     # k, we have finished this god-awful changepoint
     # output string
@@ -654,37 +867,74 @@ def minbic(x, y, bp_index, missing_val=-9999):
     tail = "% 7.2f %5d %4d" % (amp_est, n_left, n_right)
     print (head+stats+tail)
     
-    ## add to results dictionary
-    changepoint_dict[cmodel] = dict(bic=b_tot, 
-                                    mu=r_mu,
-                                    alpha=[r_alpha, r_alpha],
-                                    sse_bic=sqrt(sse_total/n_vals), # total number of non-missing
-                                                                    # values, from KTHSLR0
-                                    seg_lens=[n_left, n_right],
-                                    test_stat=f_val,
-                                    crit_val=f_crit,
-                                    amp_est=amp_est)
+    ## Record results of this test
+    result = dict(cmodel=cmodel,
+                  bic=b_tot, 
+                  mu=r_mu,
+                  alpha=[r_alpha, r_alpha],
+                  sse_bic=sqrt(sse_total/vals.n_vals), # total number of non-missing values, from KTHSLR0
+                  seg_lens=[n_left, n_right],
+                  test_stat=f_val,
+                  crit_val=f_crit,
+                  amp_est=amp_est)
     
-    ############################################################################   
-    ## TEST 4 - KTHTPR2, Amplitude shift, non-equally sloped segments
-    ##    Method - Use Kendall-Theill method to compute a linear regression for
-    ##            each of the left and right segments of the data, but do not
-    ##            assume that they must have equal slopes. 
+    return result, vals
+
+def kthtpr2(x, y, bp_index, vals, missing_val=-9999):
+    """KTHTPR2, Amplitude shift, non-equally sloped segments
+    
+    Utilizes the Kendall-Theill method to compute a linear regression on the 
+    data segments on each side of the suspected breakpoint. Then, uses these 
+    two regressions to compute errors on the residuals from each data segment.
+    
+    :Params x, y:
+        The predictor and predictand datasets as lists of floats. The length of
+        x and y must be the same size, but the values may contain an arbitrary
+        number of missing values as specified by missing_val.
+    :Param bp_index:
+        The index of the suspected changepoint in the data.
+    :Param vals:
+        A 'Values' object for storing important intermediate values from the 
+        computations during this test. This test requires vals to already 
+        contain to values:
+            vals.sse_resid - the sum square error on the residuals computed by
+                fitting a linear regression on the entire dataset
+            vals.n_vals - the number of valid (x, y) pairs given by the user
+            vals.left_kth_regress - the regression on the left data segment
+            vals.n_left - the number of valid (x, y) pairs in the left segment
+            vals.right_kth_regress - the regression on the right data segment
+            vals.n_right - the number of valid (x, y) pairs in the right segment
+    :Param missing_val:
+        (optional) The placeholder value for missing values.
+    :Returns:
+        result, a dictionary with the following fields:
+            cmodel - the name of the test
+            bic - the Bayes Information Criterion statistic for this analysis
+            mu - a 2-value tuple with the y-intercepts of the regression here
+            alpha - a 2-value tuple with the computed slopes of the regressions 
+                here
+            sse_bic - the sum square error on the computed BIC value
+            seg_lens - a 2-value tuple with the length of the segments in the 
+                regressions here
+            test_stat - the test statistic value computed here
+            crit_val - the 95% critical value for that test statistic
+            amp_est - an estimate of the changepoint amplitude
+        vals, the original 'Values' object provided to this method with no
+            modifications.
+                
+    """
     cmodel = "KTHTPR2"
-    
-    all_data = y
-    num_obs = len(y)
-    
+        
     ## NOTE - Using kth_line() to regress the left/right segments is already done
     ## in the test for KTHTPR0. Should be able to re-use the results from there
     ## in this test.
     left_x = x[:bp_index+1]
-    left_y = y[:bp_index+1]
     right_x = x[bp_index+1:]
-    right_y = y[bp_index+1:]
     
-    kthl_left = kth_line(left_x, left_y, missing_val)
-    kthl_right = kth_line(right_x, right_y, missing_val)
+    #kthl_left = kth_line(left_x, left_y, missing_val)
+    #kthl_right = kth_line(right_x, right_y, missing_val)
+    kthl_left = vals.left_kth_regress
+    kthl_right = vals.right_kth_regress
     ## END NOTE
     
     ## Estimate step change amplitude
@@ -693,15 +943,14 @@ def minbic(x, y, bp_index, missing_val=-9999):
     amp_est = y1 - y2
     
     count = kthl_left.nval + kthl_right.nval
-    #count = len(get_valid_data(left_data, missing_val))+len(get_valid_data(right_data, missing_val))
     
     sse_total = kthl_left.sseslope + kthl_right.sseslope
-    print kthl_left.sseslope, kthl_right.sseslope, sse_resid
+    print kthl_left.sseslope, kthl_right.sseslope, vals.sse_resid
     
     # Compute test statistic, f2
     # Recall the residuals computed from KTHSLR1, where we assumed constant
     # slope throughout the data segment (sse_resid)
-    f2_val = ((sse_resid-sse_total)/2.)/(sse_total/(count-4))
+    f2_val = ((vals.sse_resid-sse_total)/2.)/(sse_total/(count-4))
     f2_crit = lookup_critical(count-4, "f2")
     b_tot, b_err, b_pen = bayes(count, sse_total, 5)
     # output string
@@ -709,25 +958,73 @@ def minbic(x, y, bp_index, missing_val=-9999):
     stats =  " %7.2f %7.2f %7.3f %7.3f %7.2f %7.2f" % (kthl_left.y_int, kthl_right.y_int,
                                                        kthl_left.slope, kthl_right.slope,
                                                        f2_val, f2_crit)
-    tail = "% 7.2f %5d %4d" % (amp_est, n_left, n_right)
+    tail = "% 7.2f %5d %4d" % (amp_est, vals.n_left, vals.n_right)
     print (head+stats+tail)       
     
-    ## add to results dictionary
-    changepoint_dict[cmodel] = dict(bic=b_tot, 
-                                    mu=[kthl_left.y_int, kthl_right.y_int],
-                                    alpha=[kthl_left.slope, kthl_right.slope],
-                                    sse_bic=sqrt(sse_total/n_vals), # total number of non-missing
-                                                                    # values, from KTHSLR0
-                                    seg_lens=[n_left, n_right],
-                                    test_stat=f2_val,
-                                    crit_val=f2_crit,
-                                    amp_est=amp_est)
-       
-    ############################################################################   
-    ## TEST 5 - KTHTPR3, Amplitude shift, flat-to-sloped segments
-    ##    Method - Assume - using the regressions fit to each left/right segment
-    ##            previously - that the segment on the left has slope = 0.0.
+    ## Record result of this test
+    result = dict(cmodel=cmodel,
+                  bic=b_tot, 
+                  mu=[kthl_left.y_int, kthl_right.y_int],
+                  alpha=[kthl_left.slope, kthl_right.slope],
+                  sse_bic=sqrt(sse_total/vals.n_vals), # total number of non-missing values, from KTHSLR0
+                  seg_lens=[vals.n_left, vals.n_right],
+                  test_stat=f2_val,
+                  crit_val=f2_crit,
+                  amp_est=amp_est)
+    
+    return result, vals
+
+def kthtpr3(x, y, bp_index, vals, missing_val):
+    """KTHTPR3, Amplitude shift, flat-to-sloped segments
+    
+    Utilizes the Kendall-Theill method to compute a linear regression on the 
+    data segments on each side of the suspected breakpoint. Then, uses these 
+    two regressions to compute errors on the residuals from each data segment,
+    while assuming that the slope in the left segment is actually 0.0.
+    
+    :Params x, y:
+        The predictor and predictand datasets as lists of floats. The length of
+        x and y must be the same size, but the values may contain an arbitrary
+        number of missing values as specified by missing_val.
+    :Param bp_index:
+        The index of the suspected changepoint in the data.
+    :Param vals:
+        A 'Values' object for storing important intermediate values from the 
+        computations during this test. This test requires vals to already 
+        contain to values:
+            vals.sse_resid - the sum square error on the residuals computed by
+                fitting a linear regression on the entire dataset
+            vals.n_vals - the number of valid (x, y) pairs given by the user
+            vals.left_kth_regress - the regression on the left data segment
+            vals.n_left - the number of valid (x, y) pairs in the left segment
+            vals.right_kth_regress - the regression on the right data segment
+            vals.n_right - the number of valid (x, y) pairs in the right segment
+    :Param missing_val:
+        (optional) The placeholder value for missing values.
+    :Returns:
+        result, a dictionary with the following fields:
+            cmodel - the name of the test
+            bic - the Bayes Information Criterion statistic for this analysis
+            mu - a 2-value tuple with the y-intercepts of the regression here
+            alpha - a 2-value tuple with the computed slopes of the regressions 
+                here
+            sse_bic - the sum square error on the computed BIC value
+            seg_lens - a 2-value tuple with the length of the segments in the 
+                regressions here
+            test_stat - the test statistic value computed here
+            crit_val - the 95% critical value for that test statistic
+            amp_est - an estimate of the changepoint amplitude
+        vals, the original 'Values' object provided to this method with no
+            modifications.
+                
+    """
     cmodel = "KTHTPR3"
+    
+    right_x = x[bp_index+1:]
+    
+    ## Recall the regression fit on the left and right segments
+    kthl_left = vals.left_kth_regress
+    kthl_right = vals.right_kth_regress
     
     # We will re-use the kthl_left/right regressions fit in the last model
     y1 = kthl_left.y_med
@@ -735,101 +1032,115 @@ def minbic(x, y, bp_index, missing_val=-9999):
     amp_est = y1 - y2
     
     count = kthl_left.nval + kthl_right.nval
-    #count = len(get_valid_data(left_data, MISS))+len(get_valid_data(right_data, MISS))
     
     sse_total = kthl_left.sseflat + kthl_right.sseslope
     # Compute test statistic, f1
     # Recall the residuals computed from KTHSLR1, where we assumed constant
     # slope throughout the data segment (sse_resid)
-    f_val =  ((sse_resid-sse_total)/1.0)/(sse_total/(count-3))
+    f_val =  ((vals.sse_resid-sse_total)/1.0)/(sse_total/(count-3))
     f_crit = lookup_critical(count, "f1")
     b_tot, b_err, b_pen = bayes(count, sse_total, 4)
     # output string
     head = "%7s %6.2f %7.2f %7.2f" % (cmodel, b_tot, b_err, b_pen)
     stats =  " %7.2f %7.2f ------- %7.3f %7.2f %7.2f" % (kthl_left.y_med, kthl_right.y_int,
                                                         kthl_right.slope, f_val, f_crit)
-    tail = "% 7.2f %5d %4d" % (amp_est, n_left, n_right)
+    tail = "% 7.2f %5d %4d" % (amp_est, vals.n_left, vals.n_right)
     print (head+stats+tail)
     
-    ## add to results dictionary
-    changepoint_dict[cmodel] = dict(bic=b_tot, 
-                                    mu=[kthl_left.y_med, kthl_right.y_int],
-                                    alpha=[0.0, kthl_right.slope],
-                                    sse_bic=sqrt(sse_total/n_vals), # total number of non-missing
-                                                                    # values, from KTHSLR0
-                                    seg_lens=[n_left, n_right],
-                                    test_stat=f_val,
-                                    crit_val=f_crit,
-                                    amp_est=amp_est)
+    ## Records results from this analysis
+    result = dict(cmodel=cmodel,
+                  bic=b_tot, 
+                  mu=[kthl_left.y_med, kthl_right.y_int],
+                  alpha=[0.0, kthl_right.slope],
+                  sse_bic=sqrt(sse_total/vals.n_vals), # total number of non-missing values, from KTHSLR0
+                  seg_lens=[vals.n_left, vals.n_right],
+                  test_stat=f_val,
+                  crit_val=f_crit,
+                  amp_est=amp_est)
     
-    ############################################################################   
-    ## TEST 6 - KTHTPR4, Amplitude shift, sloped-to-flat segments
-    ##    Method - Assume - using the regressions fit to each left/right segment
-    ##            previously - that the segment on the right has slope = 0.0.
+    return result, vals
+
+def kthtpr4(x, y, bp_index, vals, missing_val):
+    """KTHTPR4, Amplitude shift, sloped-to-flat segments
+    
+    Utilizes the Kendall-Theill method to compute a linear regression on the 
+    data segments on each side of the suspected breakpoint. Then, uses these 
+    two regressions to compute errors on the residuals from each data segment,
+    while assuming that the slope in the right segment is actually 0.0.
+    
+    :Params x, y:
+        The predictor and predictand datasets as lists of floats. The length of
+        x and y must be the same size, but the values may contain an arbitrary
+        number of missing values as specified by missing_val.
+    :Param bp_index:
+        The index of the suspected changepoint in the data.
+    :Param vals:
+        A 'Values' object for storing important intermediate values from the 
+        computations during this test. This test requires vals to already 
+        contain to values:
+            vals.sse_resid - the sum square error on the residuals computed by
+                fitting a linear regression on the entire dataset
+            vals.n_vals - the number of valid (x, y) pairs given by the user
+            vals.left_kth_regress - the regression on the left data segment
+            vals.n_left - the number of valid (x, y) pairs in the left segment
+            vals.right_kth_regress - the regression on the right data segment
+            vals.n_right - the number of valid (x, y) pairs in the right segment
+    :Param missing_val:
+        (optional) The placeholder value for missing values.
+    :Returns:
+        result, a dictionary with the following fields:
+            cmodel - the name of the test
+            bic - the Bayes Information Criterion statistic for this analysis
+            mu - a 2-value tuple with the y-intercepts of the regression here
+            alpha - a 2-value tuple with the computed slopes of the regressions 
+                here
+            sse_bic - the sum square error on the computed BIC value
+            seg_lens - a 2-value tuple with the length of the segments in the 
+                regressions here
+            test_stat - the test statistic value computed here
+            crit_val - the 95% critical value for that test statistic
+            amp_est - an estimate of the changepoint amplitude
+        vals, the original 'Values' object provided to this method with no
+            modifications.
+                
+    """
     cmodel = "KTHTPR4"
     
-    # We will re-use the kthl_left/right regressions fit in KTHTPR2
+    left_x = x[:bp_index+1]
+    
+    ## Recall the regression fit on the left and right segments
+    kthl_left = vals.left_kth_regress
+    kthl_right = vals.right_kth_regress
+    
     y1 = kthl_left.y_int + kthl_left.slope*left_x[-1]
     y2 = kthl_right.y_med
     amp_est = y1 - y2
     
     count = kthl_left.nval + kthl_right.nval    
-    #count = len(get_valid_data(left_data, MISS))+len(get_valid_data(right_data, MISS))
     
     # Compute test statistic, f1
     # Recall the residuals computed from KTHSLR1, where we assumed constant
     # slope throughout the data segment (sse_resid)
     sse_total = kthl_left.sseslope + kthl_right.sseflat
-    f_val = ((sse_resid-sse_total)/1.0)/(sse_total/(count-3))
+    f_val = ((vals.sse_resid-sse_total)/1.0)/(sse_total/(count-3))
     f_crit = lookup_critical(count, "f1")
     b_tot, b_err, b_pen = bayes(count, sse_total, 4)
     # output string
     head = "%7s %6.2f %7.2f %7.2f" % (cmodel, b_tot, b_err, b_pen)
     stats =  " %7.2f %7.2f %7.3f ------- %7.2f %7.2f" % (kthl_left.y_int, kthl_right.y_med,
                                                          kthl_left.slope, f_val, f_crit)
-    tail = "% 7.2f %5d %4d" % (amp_est, n_left, n_right)
+    tail = "% 7.2f %5d %4d" % (amp_est, vals.n_left, vals.n_right)
     print (head+stats+tail)
     
-    ## add to results dictionary
-    changepoint_dict[cmodel] = dict(bic=b_tot, 
-                                    mu=[kthl_left.y_int, kthl_right.y_med],
-                                    alpha=[kthl_left.slope, 0.0],
-                                    sse_bic=sqrt(sse_total/n_vals), # total number of non-missing
-                                                                    # values, from KTHSLR0
-                                    seg_lens=[n_left, n_right],
-                                    test_stat=f_val,
-                                    crit_val=f_crit,
-                                    amp_est=amp_est)
+    ## Record result of this analysis
+    result = dict(cmodel=cmodel,
+                  bic=b_tot, 
+                  mu=[kthl_left.y_int, kthl_right.y_med],
+                  alpha=[kthl_left.slope, 0.0],
+                  sse_bic=sqrt(sse_total/vals.n_vals), # total number of non-missing values, from KTHSLR0
+                  seg_lens=[vals.n_left, vals.n_right],
+                  test_stat=f_val,
+                  crit_val=f_crit,
+                  amp_est=amp_est)
     
-    ################################################################################ 
-    ## We've finished the basic TPR tests. The PHA has loop-back criteria
-    ## which could cause the code to double back and compute these test
-    ## statistics over again or with subtle variations. I'll come back to
-    ## that...
-    ##
-    ## For now, let's look at the test results and pick the most likely
-    ## changepoint class based on the minimum BIC value found
-    results = [(cmodel, changepoint_dict[cmodel]['bic']) for cmodel in changepoint_dict]
-    results = sorted(results, key=itemgetter(1))
-    cmodel, q = results[0]
-        
-    output = changepoint_dict[cmodel]
-    iqtype = minbic_models.index(cmodel) + 1
-    sseq=output['sse_bic']
-    rmu=output['mu']
-    slpq=output['alpha']
-    qstat=output['test_stat']
-    qcrit=output['crit_val']
-    qoff=output['amp_est']
-    mkfinq=output['seg_lens']
-    
-    print ("Post: - %2d %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %5d %5d" %
-           (iqtype, q, sseq, rmu[0], rmu[1], slpq[0], slpq[1], qstat, qcrit, qoff,
-            mkfinq[0], mkfinq[1]) )
-    
-    ## Store information about this breakpoint and its crucial stats
-    return dict(cmodel=cmodel, iqtype=iqtype, asigx=qoff, azscr=qoff/sseq, 
-                rslp=[kthl_left.slope, kthl_right.slope])
-    
-        
-    
+    return result, vals
