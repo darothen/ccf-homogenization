@@ -140,7 +140,7 @@ def kth_line(x, y, missing_val=-9999):
         for i in range(nval-1):
             for j in range(i, nval):
                 if good_x[i] != good_x[j]:
-                    nslp = nslp + 1
+                    nslp += 1
                     slopes.append( (good_y[j]-good_y[i])/(good_x[j]-good_x[i]) )   
         slope = median(slopes)
         
@@ -444,7 +444,7 @@ def minbic(x, y, bp_index, missing_val=-9999, models=None):
     else:
         offset = output['amp_est']
     # Z-score for offset, normalized about the sum square error of the residuals
-    # of hte model fit.
+    # of the model fit.
     offset_z = offset/sse_bic
     
     ## Store information about this breakpoint and its crucial stats
@@ -705,7 +705,7 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
     for i in range(n_left-1):
         for j in range(i, n_left):
             if range_left[j] != range_left[i]:
-                nslp = nslp + 1
+                nslp += 1
                 slopes.append( (valid_left[j]-valid_left[i])/
                                (range_left[j]-range_left[i]) )
     # Third, generate paired slopes for the second segment.
@@ -716,7 +716,7 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
         #     left off.
         for j in range(i, n_right):
             if range_right[j] != range_right[i]:
-                nslp = nslp + 1
+                nslp += 1
                 slopes.append( (valid_right[j]-valid_right[i])/
                                (range_right[j]-range_right[i]) )
     #Fourth, find the median slope from all the ones we computed
