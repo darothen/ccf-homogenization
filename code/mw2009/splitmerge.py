@@ -228,15 +228,27 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
     
     ## EXPERIMENTAL PLACEHOLDERS - will eventually be replaced with a master
     ## loop to do all the id pairs.
-    id_list = sorted(network.stations.keys())
+    id_list = sorted(network.stations)
+    #id_list = id_list[0:2]
     pair_results = dict()
     
-    for (id1, id2) in combinations(id_list, 2):
-        pair_str = "%6s-%6s" % (id1, id2)
-        #id1 = "298107"
-        #id2 = "427260"
+    # Generate the station pairs by considering the correlated neighbors for
+    # each station in id_list. Since it's possible that two stations could be
+    # correlated with each other, will try to avoid duplicates here to avoid
+    # excessive computations
+    pairs = set()
+    for id1 in id_list:
+        for id2 in network.correlations[id1]:
+            ordered_pair = tuple(sorted((id1, id2)))
+            pairs.add(ordered_pair)
     
-        ## 
+    #id1 = "298107"
+    #id2 = "427260"
+    #for (id1, id2) in combinations(id_list, 2): # this does ALL combinations
+    for (id1, id2) in pairs:
+    
+        pair_str = "%6s-%6s" % (id1, id2)
+        
         raw_series = network.raw_series
         stations = network.stations
         series_copy = deepcopy(raw_series)
@@ -592,6 +604,11 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
                 print ("%6s-%6s  --  -- MD TESTSEG ADJ: %7.2f %7.2f %8.4f %8.4f %5d %5d %3d %5d %5d %3d %2d" % 
                        (id1,id2, asigx, azscr, rslp[0], rslp[1], end1, y_end1, m_end1, beg2, y_beg2, m_beg2, iqtype))
     
-    pair_results[pair_str] = bp_dictionary
+        pair_results[pair_str] = bp_dictionary
+    
+    ##
+    #import pickle
+    #f = open("pair_results", 'w')
+    #pickle.dump(pair_results, f)
             
             

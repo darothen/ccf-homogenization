@@ -21,7 +21,7 @@ from math import log10, sqrt
 from operator import itemgetter
 
 # ccf-homogenization imports
-from util import compute_mean, get_valid_data, compute_std
+from util import compute_mean, get_valid_data, compute_std, median
 
 class Stats(dict):
     """Base object for returning results of statistical tests.
@@ -129,7 +129,8 @@ def kth_line(x, y, missing_val=-9999):
     pairs = zip(x, y)
     # Filter out data pairs where either x_i or y_i equal missing_val
     good_data = [pair for pair in pairs if valid_pair(pair)]
-    good_x, good_y = zip(*good_data)
+    #good_x, good_y = zip(*good_data)
+    good_x, good_y = map(list, zip(*good_data))
     nval = len(good_data)
         
     # calculate paired slopes, find median value
@@ -140,17 +141,9 @@ def kth_line(x, y, missing_val=-9999):
             for j in range(i, nval):
                 if good_x[i] != good_x[j]:
                     nslp = nslp + 1
-                    slopes.append( (good_y[j]-good_y[i])/(good_x[j]-good_x[i]) )
-        # sort into ascending order
-        slopes = sorted(slopes)
-        # find the median value -
-        if (nslp%2) == 1:
-            imed = nslp/2
-            slope = slopes[imed]
-        else:
-            imed = (nslp-1)/2
-            slope = (slopes[imed]+slopes[imed+1])/2.0
-
+                    slopes.append( (good_y[j]-good_y[i])/(good_x[j]-good_x[i]) )   
+        slope = median(slopes)
+        
     # calculate y-intercept; use original lists so we can get true median
     # for all of the input data
     rx = sorted(good_x)
@@ -163,7 +156,7 @@ def kth_line(x, y, missing_val=-9999):
         imed = (nval-1)/2
         x_med = (rx[imed]+rx[imed+1])/2.0
         y_med = (ry[imed]+ry[imed+1])/2.0
-    
+#    
     y_int = y_med - slope*x_med
     
     # Calculate residuals
@@ -721,18 +714,17 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
         #     index at ibeg2+1. This corresponds to 1 here. Above in the first
         #     segment and in kth_line(), it starts the 'j' index right where 'i' 
         #     left off.
-        for j in range(1, n_right):
+        for j in range(i, n_right):
             if range_right[j] != range_right[i]:
                 nslp = nslp + 1
                 slopes.append( (valid_right[j]-valid_right[i])/
                                (range_right[j]-range_right[i]) )
-                
     #Fourth, find the median slope from all the ones we computed
     slope_ind = 1
     if not slope_ind:
         slope_est = 0.0
     else:
-        slopes = sorted(slopes)
+        #slopes = sorted(slopes)
         
         # BUG: This is the median-index finding method used in the original
         #    PHA. It's different from what is used in kth_line() (which is
@@ -740,8 +732,7 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
         #    middle two values if the list length is even).
         imed = (nslp - 1)/2
         if (nslp%2)==1: imed = imed+1 # offset by one to right if odd
-        
-        slope_est = slopes[imed]
+        slope_est = median(slopes)
         
     print "slope, ic, imet: %7.2f %5d %5d" % (slope_est, nslp, imed)
     

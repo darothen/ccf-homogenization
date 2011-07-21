@@ -156,7 +156,8 @@ if os.path.exists("corr_out"):
         
         corr_dict = dict()
         for (id, corr) in zip(others, corrs):
-            corr_dict[id] = corr
+            if not id == '000000':
+                corr_dict[id] = corr
         
         all_corrs[this] = corr_dict
         

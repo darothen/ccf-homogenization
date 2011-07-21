@@ -13,10 +13,59 @@ __docformat__ = "restructuredtext"
 
 # http://docs.python.org/library/math.html
 from math import cos, acos, sin, radians, sqrt
+from copy import deepcopy
+import random
 # http://docs.python.org/library/operator.html
 from operator import itemgetter
 # ccf-homogenization imports
 from parameters import RADIUS_EARTH
+
+def wirthselect(data, k):
+    """An efficient method for computing the median of a list of data, based on
+    Hoare's quick select and the work of Niklaus Wirth. This is a pure Python
+    implementation of the median-finding algorthim included in NumPy.
+    
+    For more information, see this thread:
+    http://comments.gmane.org/gmane.comp.python.numeric.general/32507    
+    """
+    data_copy = data
+    
+    l = 0
+    m = len(data)-1
+    while l < m:
+        x = data_copy[k]
+        i = l
+        j = m
+        while 1:
+            while data_copy[i] < x: i += 1
+            while x < data_copy[j]: j -= 1
+            if i <= j:
+                tmp = data_copy[i]
+                data_copy[i] = data_copy[j]
+                data_copy[j] = tmp
+                i += 1
+                j -= 1
+            if i > j: break
+        if j < k: l = i
+        if k < i: m = j
+    
+    return data_copy
+    
+def median(data):
+    """An efficient method for computing the median of a list of data, based on
+    Hoare's quick select and the work of Niklaus Wirth. This is a pure Python
+    implementation of the median-finding algorthim included in NumPy.
+    
+    For more information, see this thread:
+    http://comments.gmane.org/gmane.comp.python.numeric.general/32507    
+    """
+    n = len(data)
+    k = n >> 1
+    s = wirthselect(data, k)
+    if n & 1:
+        return s[k]
+    else:
+        return 0.5*(s[k]+max(s[:k]))
 
 def imo2iym(imo, beg_year=1900):
     """Converts indices in a list of monthly values to their year, month 
