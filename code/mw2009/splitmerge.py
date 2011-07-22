@@ -18,6 +18,8 @@ from operator import itemgetter
 #http://docs.python.org/library/itertools.html
 from itertools import combinations
 
+import time
+
 # ccf-homogenization imports
 from util import get_valid_data, compute_mean
 from util import scale_series, compute_monthly_anomalies, imo2iym, within
@@ -242,10 +244,11 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
             ordered_pair = tuple(sorted((id1, id2)))
             pairs.add(ordered_pair)
     
-    #id1 = "298107"
-    #id2 = "427260"
+    #id1 = "215615"
+    #id2 = "215887"
     #for (id1, id2) in combinations(id_list, 2): # this does ALL combinations
     for (id1, id2) in pairs:
+    #for (id1, id2) in [(id1, id2)]:
     
         pair_str = "%6s-%6s" % (id1, id2)
         
@@ -552,6 +555,21 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         
         ## ENTERING MINBIC    
         bp_dictionary = dict()
+####################################
+##### MULTIPROCESS
+        from multiprocessing import Pool
+        
+
+        global counter
+        multi_bp_dict = {}
+        counter = 0
+        def cb(r):
+            global counter
+            print counter, r
+            counter += 1
+        
+        start = time.clock()         
+        po = Pool()
         for left,bp,right in zip(breakpoints[0:], breakpoints[1:], breakpoints[2:]):
                     
             if left != first:
@@ -575,12 +593,118 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
             (seg_x, seg_data) = range(left_shift, right_shift+1), diff_data[left:right+1]
             bp_index = bp-left
             #print len(seg_x), len(seg_data), bp_index
-            bp_analysis = minbic(seg_x, seg_data, bp_index, MISS)
-            
-            bp_dictionary[bp] = bp_analysis    
-            
+            #bp_analysis = minbic(seg_x, seg_data, bp_index, MISS)
+            multi_bp_dict[bp] = po.apply_async(minbic,(seg_x,seg_data,bp_index,MISS,),callback=cb)
+        po.close()
+        po.join()
+        for bp in multi_bp_dict:
+            r = multi_bp_dict[bp]
+            multi_bp_dict[bp] = r.get()
+        print "counter - %d" % counter
+        elapsed = (time.clock() - start)
+        print "ELAPSED TIME - %2.3e" % elapsed
+        #print new_bp_dict
+        
+####################################
+##### THREADING
+#        import threading
+#        from Queue import Queue
+#        class MinBicComputer(threading.Thread):
+#            def __init__(self, left, bp, right, diff_data):
+#                if left != first:
+#                    self.left = left + 1
+#                else:
+#                    self.left = left
+#                self.bp = bp
+#                self.right = right
+#                self.diff_data = diff_data
+#                threading.Thread.__init__(self)
+#            
+#            def get_result(self):
+#                return (self.bp, self.result)
+#        
+#            def run(self):
+#                total_shift = -12 + 1
+#                
+#                left_shift, right_shift = self.left+total_shift, self.right+total_shift
+#                bp_shift = self.bp + total_shift
+#                y1, m1 = imo2iym(self.left)
+#                yb, mb = imo2iym(self.bp)
+#                y2, m2 = imo2iym(self.right)
+#                
+#                print "Entering MINBIC - %4d %2d    %4d %2d    %4d %2d" % (y1, m1, yb,
+#                                                                           mb, y2, m2)
+#                
+#                (seg_x, seg_data) = range(left_shift, right_shift+1), diff_data[self.left:self.right+1]
+#                bp_index = self.bp-self.left
+#                bp_analysis = minbic(seg_x, seg_data, bp_index, MISS)
+#                
+#                self.result = bp_analysis          
+#        
+#        def compute_minbic(lefts, bps, rights, diff_data):
+#            def producer(q, lefts, bps, rights, diff_data):
+#                for (left, bp, right) in zip(lefts, bps, rights):
+#                    thread = MinBicComputer(left, bp, right, diff_data)
+#                    thread.start()
+#                    q.put(thread, True)
+#                    
+#            finished = dict()
+#            def consumer(q, bps):
+#                while len(finished) < bps:
+#                    thread = q.get(True)
+#                    thread.join()
+#                    bp, res = thread.get_result()
+#                    finished[bp] = res
+#            
+#            q = Queue(len(bps))
+#            prod_thread = threading.Thread(target=producer, args=(q, lefts, bps, rights, diff_data))
+#            cons_thread = threading.Thread(target=consumer, args=(q, len(bps)))
+#            prod_thread.start()
+#            cons_thread.start()
+#            prod_thread.join()
+#            cons_thread.join()
+#            return finished
+#            
+#        lefts, bps, rights = breakpoints[0:-2], breakpoints[1:-1], breakpoints[2:]
+#        start = time.clock()
+#        bp_dictionary = compute_minbic(lefts, bps, rights, diff_data)
+#        elapsed1 = (time.clock() - start)
+#        print "ELAPSED TIME = %3.2e" % elapsed1
+####################################
+##### NORMAL        
+#        start = time.clock()
+#        for left,bp,right in zip(breakpoints[0:], breakpoints[1:], breakpoints[2:]):
+#                    
+#            if left != first:
+#                left = left + 1
+#            # recall that we only consider data after the first full year. we will be 
+#            # computing regressions with the independent variable indexed from this 
+#            # starting point, so we need to shift these indices. we also need to shift them
+#            # by +1 if this is any segment beyond the first one, so that we don't include
+#            # changepoints in more than one analysis.
+#            # TOTAL_SHIFT = -12 + 1 = -11
+#            # 
+#            # However, this shift is only necessary while looking at the array indices that
+#            # we generate using range(). the data should already be aligned correctly.
+#            total_shift = -12 + 1
+#            left_shift, bp_shift, right_shift = left+total_shift, bp+total_shift, right+total_shift
+#            y1, m1 = imo2iym(left)
+#            yb, mb = imo2iym(bp)
+#            y2, m2 = imo2iym(right)
+#            print "Entering MINBIC - %4d %2d    %4d %2d    %4d %2d" % (y1, m1, yb,
+#                                                                       mb, y2, m2)
+#            (seg_x, seg_data) = range(left_shift, right_shift+1), diff_data[left:right+1]
+#            bp_index = bp-left
+#            #print len(seg_x), len(seg_data), bp_index
+#            bp_analysis = minbic(seg_x, seg_data, bp_index, MISS)
+#            
+#            bp_dictionary[bp] = bp_analysis    
+#        elapsed2 = (time.clock() - start)
+#        print "ELAPSED TIME = %3.2e" % elapsed2
+        
         ##################################3
         ## Final stage - print the adjustment summaries
+        bp_dictionary = multi_bp_dict
         sorted_bps = sorted(bp_dictionary.keys())
         for bp in sorted_bps:
             stats = bp_dictionary[bp]
@@ -605,10 +729,13 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
                        (id1,id2, asigx, azscr, rslp[0], rslp[1], end1, y_end1, m_end1, beg2, y_beg2, m_beg2, iqtype))
     
         pair_results[pair_str] = bp_dictionary
-    
+        
+        #print "ELAPSED TIMES = %3.2e %3.2e" % (elapsed1, elapsed2)
+    print "done"
     ##
     #import pickle
     #f = open("pair_results", 'w')
     #pickle.dump(pair_results, f)
+    return pair_results
             
             

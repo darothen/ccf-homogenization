@@ -1125,7 +1125,7 @@ c                     No link back in paired stn
    55         enddo ! end do all candidates
 
 c    !!!!!! Daniel
-c            call exit()
+            call exit()
 c
 
             else if(method .eq. 2) then

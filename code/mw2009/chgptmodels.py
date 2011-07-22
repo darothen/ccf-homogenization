@@ -20,6 +20,8 @@ from math import log10, sqrt
 # http://docs.python.org/library/operator.html
 from operator import itemgetter
 
+import numpy as np
+
 # ccf-homogenization imports
 from util import compute_mean, get_valid_data, compute_std, median
 
@@ -124,7 +126,8 @@ def kth_line(x, y, missing_val=-9999):
         """Given a 2-tuple, returns False if either of the values are equal
         to the supplied missing_val.
         """
-        return ( (pair[0] != missing_val))
+        return ( (pair[0] != missing_val) and 
+                 (pair[1] != missing_val))
     
     pairs = zip(x, y)
     # Filter out data pairs where either x_i or y_i equal missing_val
@@ -142,7 +145,7 @@ def kth_line(x, y, missing_val=-9999):
                 if good_x[i] != good_x[j]:
                     nslp += 1
                     slopes.append( (good_y[j]-good_y[i])/(good_x[j]-good_x[i]) )   
-        slope = median(slopes)
+        slope = np.median(slopes)
         
     # calculate y-intercept; use original lists so we can get true median
     # for all of the input data
@@ -714,7 +717,7 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
         #     index at ibeg2+1. This corresponds to 1 here. Above in the first
         #     segment and in kth_line(), it starts the 'j' index right where 'i' 
         #     left off.
-        for j in range(i, n_right):
+        for j in range(1, n_right):
             if range_right[j] != range_right[i]:
                 nslp += 1
                 slopes.append( (valid_right[j]-valid_right[i])/

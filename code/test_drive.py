@@ -12,6 +12,8 @@ import random
 # http://docs.python.org/library/operator.html
 from operator import itemgetter
 
+import pickle
+
 from math import sqrt
 
 import os
@@ -206,7 +208,7 @@ else:
 n.correlations = all_corrs
 
 ##########################################################################
-## BEGIN SPLITMERGE EXPERIMENTS ##
+## BEGIN SPLITMERGE EXPERIMENTS ##if os.path.exists("corr_out"):
 
 hom_params = dict(nstns=params.nstns,
                     numsrt=params.numsrt,
@@ -217,7 +219,7 @@ hom_params = dict(nstns=params.nstns,
                     variable=params.variable,
                     stations=params.stations,
                     project=params.project,
-                    ######################
+                    ######################if os.path.exists("corr_out"):
                     numyr=params.endyr-params.begyr,
                     nmo=(params.endyr-params.begyr)*12,
                     minser=5, # min number of ind. months in a raw series that can be tested
@@ -240,5 +242,100 @@ hom_params = dict(nstns=params.nstns,
                     stepthres=0.0, # a temperature step limit at which these models might work
                 )
 hom_params = parameters.Parameters(**hom_params)
-splitmerge(n, **hom_params)
+if os.path.exists("pair_results"):
+    print "Found pair_results on disk"
+    pair_results = pickle.load(open("pair_results", "r"))
+else:
+    print "Entering splitmerge to find changepoints"
+    pair_results = splitmerge(n, **hom_params)
 
+### Try to print out the series in a table 
+import numpy as np
+#all_data = np.zeros([hom_params.nmo, hom_params.nstns])
+ids = n.stations.keys()
+all_data = [n.raw_series[id].monthly_series for id in ids]
+all_data = np.array(all_data)
+
+## Attribute changepoint hits to pair arrays
+hits = np.zeros_like(all_data)
+hits_neighbors = [[list() for i in xrange(hom_params.nmo)] for i in xrange(len(ids))]
+for pair in pair_results:
+    id1, id2 = pair.split("-")
+    id1_ind, id2_ind = ids.index(id1), ids.index(id2)
+    
+    result = pair_results[pair]
+    for (bp, result) in result.iteritems():
+        if result['iqtype'] >= 3:
+            hits[id1_ind, bp] += 1
+            hits[id2_ind, bp] += 1
+            
+            hits_neighbors[id1_ind][bp].append(id2)
+            hits_neighbors[id2_ind][bp].append(id1)
+
+## Print header - 
+head1 = "             |"+"|".join([i[:3] for i in ids])+"|"
+head2 = "             |"+"|".join([i[3:] for i in ids])+"|"
+print head1
+print head2
+
+## Print monthly series basic
+from util import imo2iym
+#con2str = lambda val, miss=-9999: "---" if val != miss else "-x-"
+def con2str(data, missing_val=-9999):
+    val, hits = data
+    if val == missing_val:
+        return "-x-"
+    elif hits > 0:
+        return "%3d" % hits
+    else:
+        return "---"
+     
+for imo in xrange(hom_params.nmo):
+#for imo in xrange(10):
+    year, month = imo2iym(imo)
+    base_str = "%4d %2d %4d |" % (year, month, imo)
+    month_strs = "|".join(map(con2str, zip(all_data[:,imo],
+                                               hits[:,imo])))+"|"
+    print base_str+month_strs
+
+
+# Test plot
+#pair_str = pair_results.keys()[-1]
+#id1, id2 = pair_str.split("-")
+#bp_inds = pair_results[pair_str].keys()
+#bps = pair_results[pair_str]
+#bp_colors = [bps[bp]['iqtype'] for bp in bp_inds]
+#bp_cs = []
+#for c in bp_colors:
+#    if c > 3:
+#        bp_cs.append('r')
+#    else:
+#        bp_cs.append('y')
+#
+#series1, series2 = n.raw_series[id1], n.raw_series[id2]
+#
+#anom1 = compute_monthly_anomalies(series1.series, -9999)
+#series1.set_series(anom1, series1.years)
+#data1 = series1.monthly_series
+#
+#anom2 = compute_monthly_anomalies(series2.series, -9999)
+#series2.set_series(anom2, series2.years)
+#data2 = series2.monthly_series
+#
+#import numpy as np
+#from pylab import *
+#
+#dm1 = np.ma.masked_equal(data1, series1.MISSING_VAL)*.1
+#dm2 = np.ma.masked_equal(data2, series2.MISSING_VAL)*.1
+#
+#subplot(2,1,1)
+#plot(dm1)
+#vlines(bp_inds, ylim()[0], ylim()[1], colors=bp_cs)
+#title(series1)
+#
+#subplot(2,1,2)
+#plot(dm2)
+#vlines(bp_inds, ylim()[0], ylim()[1], colors=bp_cs)
+#title(series2)
+#
+#subplots_adjust(hspace=.3)
