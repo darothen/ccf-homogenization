@@ -10,7 +10,8 @@ model types during splitmerge process
 GLOSSARY OF ABBREVIATIONS -
 
 BIC - Bayes Information Criterion; test statistic for evaluating test statistics
-KTH - Kendall-Theill robust line fit method
+KTH - Kendall-Theill robust line fit method 
+    (http://en.wikipedia.org/wiki/Theil%E2%80%93Sen_estimator)
 
 """
 __docformat__ = "restructuredtext"
@@ -313,18 +314,8 @@ def minbic(x, y, bp_index, missing_val=-9999, models=None):
     changepoint as one of a pre-specified list of models (minbic_models, above).
     
     This method performs several statistical tests in an attempt to fit a
-    model to the suspected changepoint in the data passed to it. In this version
-    of the method, the statistical tests are based on the Kendall-Theill method,
-    although future versions will support ordinary least squares and alternative
-    model-fit analyses. 
+    model to the suspected changepoint in the data passed to it.
     
-    A key feature of the method is that the tests based on the Kendall-Theill
-    statistic are allowed to cascade; computations in the earlier tests are
-    re-used (such as sum square error on the residuals for the line fit to the
-    entire data segment) ot minimize the amount of computations necessary here.
-    These re-used results are tracked in comments throughout the method. Also,
-    the tests used to fit certain models are described in comments in this 
-    method as they are encountered.
     
     Upon completion of the changepoint tests, this method will identify which
     test minimizes the Bayesian Information Criterion, based on the error
@@ -338,12 +329,15 @@ def minbic(x, y, bp_index, missing_val=-9999, models=None):
     :Param bp_index:
         The index of the suspected changepoint in the x and y datasets.
     :Param missing_val:
-        (optional) The placeholder for missing values in the datasets.
+        (optional) A float or int representing the placeholder for missing 
+        values in the datasets; default is -9999.
     :Param models:
         The list of potential model types and analysis functions. Should be 
         passed as a list of 2-tuples. The first element in each tuple should be
         the model name as a string; the second element should be the function
-        to call to analyze this model.
+        to call to analyze this model. For example, a valid models passed to
+        this function might be:
+            [('my_simple_test', test_function), ...]
     :Return:
         A dictionary containing the results of this analysis with the following
         fields:
@@ -351,10 +345,13 @@ def minbic(x, y, bp_index, missing_val=-9999, models=None):
             The name of the changepoint model, as a string
         :Param iqtype:
             The type of changepoint model, as an integer. Corresponds to the
-            order that models was passed to this function.
-        :Params offset, offset_z:
-            The amplitude change at the breakpoint and the z-score of this 
-            change based on the model error.
+            order in the 'models' list that was passed to this function.
+        :Param offset:
+            The computed amplitude change at the breakpoint.
+        :Param offset_z:
+            The z-score of the computed amplitude change at the breakpoint,
+            normalized by the error associated with the model fit at the 
+            breakpoint.
         :Param slopes:
             A two-element tuple containing the slope of the regression fit to
             the left and right segments of the data.
@@ -364,7 +361,7 @@ def minbic(x, y, bp_index, missing_val=-9999, models=None):
     ## Figure out what changepoint models to test for. A default is defined
     ## here if no models were specified by the user.
     if not models:
-        models = ( 
+        models = [
                 # Homogeneous linear types -
                    #('KTHSLR0', kthslr0) # simple flat line
                     ('KTHSLR1', kthslr1), # sloped straight line
@@ -374,7 +371,7 @@ def minbic(x, y, bp_index, missing_val=-9999, models=None):
                     ('KTHTPR2', kthtpr2), # amplitude shift with non-equal sloped segments
                     ('KTHTPR3', kthtpr3), # amplitude shift with flat-to-slope segments
                     ('KTHTPR4', kthtpr4), # amplitude shift with slope-to-flat segments  
-                 )
+                 ]
     model_order, model_fcns = zip(*models)
         
     # Sanity check that we have a good batch of data
@@ -475,17 +472,26 @@ def kthslr1(x, y, bp_index, vals, missing_val=-9999):
         (optional) The placeholder value for missing values.
     :Returns:
         result, a dictionary with the following fields:
-            cmodel - the name of the test ('KTHSLR1')
-            bic - the Bayes Information Criterion statistic for this analysis
-            mu - a 2-value tuple with the y-intercepts of the regression here
-            alpha - a 2-value tuple with the computed slopes of the regressions 
+            :Param cmodel:
+                The name of the test ('KTHSLR1')
+            :Param bic: 
+                The Bayes Information Criterion statistic for this analysis
+            :Param mu: 
+                A 2-value tuple with the y-intercepts of the regression here
+            :Param alpha: 
+                A 2-value tuple with the computed slopes of the regressions 
                 here
-            sse_bic - the sum square error on the computed BIC value
-            seg_lens - a 2-value tuple with the length of the segments in the 
+            :Param sse_bic: 
+                The sum square error on the computed BIC value
+            :Param seg_lens: 
+                A 2-value tuple with the length of the segments in the 
                 regressions here
-            test_stat - the test statistic value computed here
-            crit_val - the 95% critical value for that test statistic
-            amp_est - an estimate of the changepoint amplitude
+            :Param test_stat: 
+                The test statistic value computed here
+            :Param crit_val: 
+                The critical value for the test statistic at alpha=0.05.
+            :Param amp_est: 
+                An estimate of the changepoint amplitude
         vals, the original 'Values' object provided to this method with the
             following modifications:
             added vals.sse_resid - the sum square error on the residuals from this
@@ -504,7 +510,7 @@ def kthslr1(x, y, bp_index, vals, missing_val=-9999):
     slope = kth_regression.slope
     y_int = kth_regression.y_int
     sse_resid = kth_regression.sseslope
-    amp_est = 0.0
+    amp_est = 0.0 # Test assumes no step change
     
     # Bayes Info Criterion - total, due to error in variance, and penalty
     b_tot, b_err, b_pen = bayes(num_obs, sse_resid, 2)
@@ -537,7 +543,7 @@ def kthtpr0(x, y, bp_index, vals, missing_val=-9999):
     """KTHTPR0, Amplitude change, no slope change
     
     Utilizes the Kendall-Theill method to compute a linear regression on the 
-    data segments on each side of the suspected breajpoint. Then, applies a
+    data segments on each side of the suspected breakpoint. Then, applies a
     student's t-test to see whether the mean value for the two segments differs.
     
     :Params x, y:
@@ -554,17 +560,26 @@ def kthtpr0(x, y, bp_index, vals, missing_val=-9999):
         (optional) The placeholder value for missing values.
     :Returns:
         result, a dictionary with the following fields:
-            cmodel - the name of the test
-            bic - the Bayes Information Criterion statistic for this analysis
-            mu - a 2-value tuple with the y-intercepts of the regression here
-            alpha - a 2-value tuple with the computed slopes of the regressions 
+            :Param cmodel:
+                The name of the test ('KTHSLR1')
+            :Param bic: 
+                The Bayes Information Criterion statistic for this analysis
+            :Param mu: 
+                A 2-value tuple with the y-intercepts of the regression here
+            :Param alpha: 
+                A 2-value tuple with the computed slopes of the regressions 
                 here
-            sse_bic - the sum square error on the computed BIC value
-            seg_lens - a 2-value tuple with the length of the segments in the 
+            :Param sse_bic: 
+                The sum square error on the computed BIC value
+            :Param seg_lens: 
+                A 2-value tuple with the length of the segments in the 
                 regressions here
-            test_stat - the test statistic value computed here
-            crit_val - the 95% critical value for that test statistic
-            amp_est - an estimate of the changepoint amplitude
+            :Param test_stat: 
+                The test statistic value computed here
+            :Param crit_val: 
+                The critical value for the test statistic at alpha=0.05.
+            :Param amp_est: 
+                An estimate of the changepoint amplitude
         vals, the original 'Values' object provided to this method with the
             following modifications:
             added vals.left_kth_regress - the regression fit on the left 
@@ -640,7 +655,7 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
     """KTHTPR1, Amplitude change, equal slope segments
     
     Utilizes the Kendall-Theill method to compute a linear regression on the 
-    data segments on each side of the suspected breajpoint. Then, assuming the
+    data segments on each side of the suspected breakpoint. Then, assuming the
     slope on each segment is equal, computes errors from the modeled residuals
     on each segment.
     
@@ -661,30 +676,38 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
         (optional) The placeholder value for missing values.
     :Returns:
         result, a dictionary with the following fields:
-            cmodel - the name of the test
-            bic - the Bayes Information Criterion statistic for this analysis
-            mu - a 2-value tuple with the y-intercepts of the regression here
-            alpha - a 2-value tuple with the computed slopes of the regressions 
+            :Param cmodel:
+                The name of the test ('KTHSLR1')
+            :Param bic: 
+                The Bayes Information Criterion statistic for this analysis
+            :Param mu: 
+                A 2-value tuple with the y-intercepts of the regression here
+            :Param alpha: 
+                A 2-value tuple with the computed slopes of the regressions 
                 here
-            sse_bic - the sum square error on the computed BIC value
-            seg_lens - a 2-value tuple with the length of the segments in the 
+            :Param sse_bic: 
+                The sum square error on the computed BIC value
+            :Param seg_lens: 
+                A 2-value tuple with the length of the segments in the 
                 regressions here
-            test_stat - the test statistic value computed here
-            crit_val - the 95% critical value for that test statistic
-            amp_est - an estimate of the changepoint amplitude
+            :Param test_stat: 
+                The test statistic value computed here
+            :Param crit_val: 
+                The critical value for the test statistic at alpha=0.05.
+            :Param amp_est: 
+                An estimate of the changepoint amplitude
         vals, the original 'Values' object provided to this method with no
             modifications.
                 
     """
     cmodel = "KTHTPR1"
     
-    all_data = y
     num_obs = len(y)
     left_data = y[:bp_index+1]
     right_data = y[bp_index+1:]
     
     ## 1) Compute the mean for *all* of the data
-    all_valid_data = get_valid_data(all_data, missing_val)
+    all_valid_data = get_valid_data(y, missing_val)
     all_mean = compute_mean(all_valid_data, valid=True)
     
     ## 2) use Kendall-Theill method with single slope
@@ -699,8 +722,7 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
     ##    need to use the points (1, 10) and (6, 4). The difference is signficant,
     ##    but it is an easy change - merely reproduce the valid_x and valid_y
     ##    code from kth_line() above.
-    valid_all = all_valid_data
-    n_all = len(valid_all)
+    n_all = len(all_valid_data)
     range_all = range(1, n_all+1)
     
     valid_left = get_valid_data(left_data, missing_val)
@@ -711,12 +733,10 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
     range_right = range(n_left+1, n_all+1)
     
     # Second, generate paired slopes for the first segment.
-    nslp = 0
     slopes = []
     for i in range(n_left-1):
         for j in range(i, n_left):
             if range_left[j] != range_left[i]:
-                nslp += 1
                 slopes.append( (valid_left[j]-valid_left[i])/
                                (range_left[j]-range_left[i]) )
     # Third, generate paired slopes for the second segment.
@@ -727,9 +747,9 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
         #     left off.
         for j in range(1, n_right):
             if range_right[j] != range_right[i]:
-                nslp += 1
                 slopes.append( (valid_right[j]-valid_right[i])/
                                (range_right[j]-range_right[i]) )
+    nslp = len(slopes)
     #Fourth, find the median slope from all the ones we computed
     slope_ind = 1
     if not slope_ind:
@@ -910,17 +930,26 @@ def kthtpr2(x, y, bp_index, vals, missing_val=-9999):
         (optional) The placeholder value for missing values.
     :Returns:
         result, a dictionary with the following fields:
-            cmodel - the name of the test
-            bic - the Bayes Information Criterion statistic for this analysis
-            mu - a 2-value tuple with the y-intercepts of the regression here
-            alpha - a 2-value tuple with the computed slopes of the regressions 
+            :Param cmodel:
+                The name of the test ('KTHSLR1')
+            :Param bic: 
+                The Bayes Information Criterion statistic for this analysis
+            :Param mu: 
+                A 2-value tuple with the y-intercepts of the regression here
+            :Param alpha: 
+                A 2-value tuple with the computed slopes of the regressions 
                 here
-            sse_bic - the sum square error on the computed BIC value
-            seg_lens - a 2-value tuple with the length of the segments in the 
+            :Param sse_bic: 
+                The sum square error on the computed BIC value
+            :Param seg_lens: 
+                A 2-value tuple with the length of the segments in the 
                 regressions here
-            test_stat - the test statistic value computed here
-            crit_val - the 95% critical value for that test statistic
-            amp_est - an estimate of the changepoint amplitude
+            :Param test_stat: 
+                The test statistic value computed here
+            :Param crit_val: 
+                The critical value for the test statistic at alpha=0.05.
+            :Param amp_est: 
+                An estimate of the changepoint amplitude
         vals, the original 'Values' object provided to this method with no
             modifications.
                 
@@ -1005,17 +1034,26 @@ def kthtpr3(x, y, bp_index, vals, missing_val):
         (optional) The placeholder value for missing values.
     :Returns:
         result, a dictionary with the following fields:
-            cmodel - the name of the test
-            bic - the Bayes Information Criterion statistic for this analysis
-            mu - a 2-value tuple with the y-intercepts of the regression here
-            alpha - a 2-value tuple with the computed slopes of the regressions 
+            :Param cmodel:
+                The name of the test ('KTHSLR1')
+            :Param bic: 
+                The Bayes Information Criterion statistic for this analysis
+            :Param mu: 
+                A 2-value tuple with the y-intercepts of the regression here
+            :Param alpha: 
+                A 2-value tuple with the computed slopes of the regressions 
                 here
-            sse_bic - the sum square error on the computed BIC value
-            seg_lens - a 2-value tuple with the length of the segments in the 
+            :Param sse_bic: 
+                The sum square error on the computed BIC value
+            :Param seg_lens: 
+                A 2-value tuple with the length of the segments in the 
                 regressions here
-            test_stat - the test statistic value computed here
-            crit_val - the 95% critical value for that test statistic
-            amp_est - an estimate of the changepoint amplitude
+            :Param test_stat: 
+                The test statistic value computed here
+            :Param crit_val: 
+                The critical value for the test statistic at alpha=0.05.
+            :Param amp_est: 
+                An estimate of the changepoint amplitude
         vals, the original 'Values' object provided to this method with no
             modifications.
                 
@@ -1091,17 +1129,26 @@ def kthtpr4(x, y, bp_index, vals, missing_val):
         (optional) The placeholder value for missing values.
     :Returns:
         result, a dictionary with the following fields:
-            cmodel - the name of the test
-            bic - the Bayes Information Criterion statistic for this analysis
-            mu - a 2-value tuple with the y-intercepts of the regression here
-            alpha - a 2-value tuple with the computed slopes of the regressions 
+            :Param cmodel:
+                The name of the test ('KTHSLR1')
+            :Param bic: 
+                The Bayes Information Criterion statistic for this analysis
+            :Param mu: 
+                A 2-value tuple with the y-intercepts of the regression here
+            :Param alpha: 
+                A 2-value tuple with the computed slopes of the regressions 
                 here
-            sse_bic - the sum square error on the computed BIC value
-            seg_lens - a 2-value tuple with the length of the segments in the 
+            :Param sse_bic: 
+                The sum square error on the computed BIC value
+            :Param seg_lens: 
+                A 2-value tuple with the length of the segments in the 
                 regressions here
-            test_stat - the test statistic value computed here
-            crit_val - the 95% critical value for that test statistic
-            amp_est - an estimate of the changepoint amplitude
+            :Param test_stat: 
+                The test statistic value computed here
+            :Param crit_val: 
+                The critical value for the test statistic at alpha=0.05.
+            :Param amp_est: 
+                An estimate of the changepoint amplitude
         vals, the original 'Values' object provided to this method with no
             modifications.
                 
