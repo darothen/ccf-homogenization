@@ -23,7 +23,10 @@ from parameters import RADIUS_EARTH
 def wirthselect(data, k):
     """An efficient method for computing the median of a list of data, based on
     Hoare's quick select and the work of Niklaus Wirth. This is a pure Python
-    implementation of the median-finding algorthim included in NumPy.
+    implementation of the median-finding algorthim included in NumPy. It is
+    destructive of the data passed in, so it will pass back a copy of data
+    that has been modified (partially sorted in order) to preserve the orignal
+    data list.
     
     For more information, see this thread:
     http://comments.gmane.org/gmane.comp.python.numeric.general/32507    
@@ -60,12 +63,13 @@ def median(data):
     http://comments.gmane.org/gmane.comp.python.numeric.general/32507    
     """
     n = len(data)
-    k = n >> 1
+    k = n // 2
     s = wirthselect(data, k)
     if n & 1:
         return s[k]
     else:
-        return 0.5*(s[k]+max(s[:k]))
+        #return 0.5*(s[k]+max(s[:k]))
+        return s[k+1]
 
 def imo2iym(imo, beg_year=1900):
     """Converts indices in a list of monthly values to their year, month 
