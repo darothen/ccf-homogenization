@@ -86,6 +86,8 @@ c          print *,' One of pair miss: ', imo
           rTraw(imo) = amiss  
         endif  
       enddo
+      print *,rrtemp(1,1:50)
+      print *,rrtemp(2,1:50)
       !!!
       !print *, rTraw(1), rrtemp(1,1), rrtemp(2,1)
       !print *, rTraw(54), rrtemp(1,54), rrtemp(2,54)
@@ -783,8 +785,10 @@ c         Do nothing - goto next segment
         endif  
      
 c       standardize series for split/merge stats
-        if(iscrit(iopt) .ne. iBstat) then
+        if(iscrit(iopt) .ne. iBstat) then 
           call standard(qy,z,1,numx,nmo)
+          print *,qy(1:50)
+          print *,z(1:50)
           !!!
           !open(654, FILE=subnet(1)//"-"//subnet(2)//".z")
           !write(654,*) z

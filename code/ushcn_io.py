@@ -91,10 +91,17 @@ def get_ushcn_data(params):
         A collection of USHCN data series.
         
     """
+    
+    
     if params.data_src not in SOURCES:
         raise ArgumentError("source", params.data_src, proper=SOURCES)
     if params.variable not in ELEM_TYPES:
         raise ArgumentError("variable", params.variable, proper=ELEM_CODES)    
+    
+    ## SYNTHETIC BENCHMARK BRANCH CONSTANTS INJECTION
+    if params.benchmark:
+        USHCN_RAW_DATA_PATTERN = "BENCHMARK_%s.%s" 
+        USHCN_STATION_LIST = "benchmark-stations.txt"
     
     data_fn = (USHCN_RAW_DATA_PATTERN % (params.data_src, params.variable)) + ".gz"
     station_list_fn = USHCN_STATION_LIST
@@ -220,7 +227,7 @@ def read_ushcn_dataset_string(data_str):
     """
     data_str = data_str.strip()
     data_bits = data_str.split()
-    
+
     identifier = data_bits[0]
     id = identifier[:6]
     variable = int(identifier[6])
@@ -285,7 +292,7 @@ def read_station_string(station_str):
          
     """
     station_str = station_str.strip()
-    
+
     coop_id = station_str[0:6]
     lat = float(station_str[7:15])
     lon = float(station_str[16:25])

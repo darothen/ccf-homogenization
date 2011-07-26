@@ -18,7 +18,7 @@ c       For the Normals.... used 1965
 
 c       End year for the project series
         integer endyr
-        parameter (endyr = 2010)
+        parameter (endyr = 2000)
 
 c       number of station neighbors in the input network + cand (corr file)
 c       problem is that all stations are not neighbors of their neighbors
@@ -27,14 +27,14 @@ c       problem is that all stations are not neighbors of their neighbors
 
 c       Number of sub-network "neighborhood" stations (including candidate!)
         integer nstns
-c        parameter (nstns = 21)
-	parameter (nstns = 52)
+        parameter (nstns = 21)
+c	parameter (nstns = 52)
 
 c       Maximum number of stations and sub-networks (neighborhoods) in
 c       the entire network. Number of stations in the metalist
         integer maxstns
-c        parameter (maxstns = 21)
-	parameter (maxstns = 52)
+        parameter (maxstns = 21)
+c	parameter (maxstns = 52)
 
 c       to combat infinite loops 
 c       number of inhomog "hits" found in an iteration

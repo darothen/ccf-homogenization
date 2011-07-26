@@ -202,7 +202,7 @@ def snht(data, missing_val=-9999, valid_count=None, standardized=False):
         if data[pivot] != missing_val:
             left_series = get_valid_data(data[:pivot+1])
             right_series = get_valid_data(data[pivot+1:valid_count]) # BUG Line
-           #right_series = get_valid_data(data[pivot+1:]) # FIX Line
+            #right_series = get_valid_data(data[pivot+1:]) # FIX Line
             
             ## Compute mean of data left of the pivot; skip to next pivot value
             ## if no good data was found in this segment.
@@ -222,6 +222,8 @@ def snht(data, missing_val=-9999, valid_count=None, standardized=False):
                 break
             
             ## Compute and store test statistics
+            if pivot == valid_count-2:
+                print nleft, mean_left, sum_left, nright, mean_right, sum_right
             ts[pivot] = nleft*(mean_left**2) + nright*(mean_right**2)
     
     return ts
@@ -249,8 +251,10 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
     #for (id1, id2) in combinations(id_list, 2): # this does ALL combinations
     for (id1, id2) in pairs:
     #for (id1, id2) in [(id1, id2)]:
-    
+        print "Pair %s with %s" % (id1, id2)
         pair_str = "%6s-%6s" % (id1, id2)
+        #if pair_str != "830006-830009":
+        #    continue
         
         raw_series = network.raw_series
         stations = network.stations
@@ -275,6 +279,10 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         series2 = series_copy[id2]
         data2 = series2.monthly_series
         
+        
+        print data1[:50]
+        print data2[:50]
+        print "################################################################"
         ## Compute the difference series        
         diff_data = diff(data1, data2)
         MISS = series1.MISSING_VAL # Missing value placeholder
@@ -288,15 +296,18 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         ## Ultimately, we save the extreme early and extreme late month with valid
         ## data to use as our first guess at the undocumented changepoints.
         first = 0
-        #first_set = False
+        first_set = False
         last = 0
         for (i, d1, d2) in zip(xrange(num_months), data1, data2):
             if d1!=MISS and d2!=MISS:
-                if first < 12:
+                #if first < 12:
+                #    first = i
+                #    #first_set = True
+                if not first_set:
                     first = i
-                    #first_set = True
+                    first_set = True
                 last = i
-        
+                
         ## Set the initial breakpoints and the list of already-found, homogenous
         ## segments.    
         breakpoints = [first, last, ]
@@ -317,8 +328,8 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
             new_homog_segs = []
         
             print "Parse segments (isplit = 1), ipass: ", iter
-            print breakpoints
-            print seg_bounds
+            #print breakpoints
+            #print seg_bounds
             
             #####################################################################
             ## Loop over the segments we have just found and apply the 
@@ -366,6 +377,8 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
             ## that in snht(), but we'll do it right now so we can inspect those
             ## standardized values later.
                 z = standardize(segment, MISS)
+                print segment[:50]
+                print z[:50]
                 
             ## Apply standard normal homogeneity test. 
             ## For mechanics, see Alexandersson and Moberg 1997, Int'l Jrnl of
@@ -446,9 +459,9 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
             ## means that the breakpoint we previously found in the segment has 
             ## been superseded.
             new_breakpoints = sorted(new_breakpoints)
-            print new_breakpoints
+            #print new_breakpoints
             seg_bounds = zip(new_breakpoints[:-2], new_breakpoints[2:])
-            print seg_bounds
+            #print seg_bounds
             
             remove_breakpoints = set()
             merged_breakpoints = set()
@@ -458,7 +471,7 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
                             
                 for ((l ,r), new_bp) in zip(seg_bounds, new_breakpoints[1:-1]):
                     
-                    print imo2iym(l), imo2iym(r)
+                    #print imo2iym(l), imo2iym(r)
                     
     #                # short circuit and skip this segment if we already know that it's
     #                # homogenous
@@ -551,7 +564,7 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         if first not in breakpoints:
             breakpoints.insert(0, first)
         ym_breakpoints = map(imo2iym, breakpoints)
-        print ym_breakpoints
+        #print ym_breakpoints
         
         ## ENTERING MINBIC    
         bp_dictionary = dict()
@@ -565,11 +578,11 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         counter = 0
         def cb(r):
             global counter
-            print counter, r
+            #print counter, r
             counter += 1
         
         start = time.clock()         
-        po = Pool()
+        po = Pool(processes=4)
         for left,bp,right in zip(breakpoints[0:], breakpoints[1:], breakpoints[2:]):
                     
             if left != first:
@@ -588,8 +601,8 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
             y1, m1 = imo2iym(left)
             yb, mb = imo2iym(bp)
             y2, m2 = imo2iym(right)
-            print "Entering MINBIC - %4d %2d    %4d %2d    %4d %2d" % (y1, m1, yb,
-                                                                       mb, y2, m2)
+            #print "Entering MINBIC - %4d %2d    %4d %2d    %4d %2d" % (y1, m1, yb,
+            #                                                           mb, y2, m2)
             (seg_x, seg_data) = range(left_shift, right_shift+1), diff_data[left:right+1]
             bp_index = bp-left
             #print len(seg_x), len(seg_data), bp_index
@@ -600,7 +613,7 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         for bp in multi_bp_dict:
             r = multi_bp_dict[bp]
             multi_bp_dict[bp] = r.get()
-        print "counter - %d" % counter
+        #print "counter - %d" % counter
         elapsed = (time.clock() - start)
         print "ELAPSED TIME - %2.3e" % elapsed
         #print new_bp_dict
@@ -733,9 +746,9 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         #print "ELAPSED TIMES = %3.2e %3.2e" % (elapsed1, elapsed2)
     print "done"
     ##
-    #import pickle
-    #f = open("pair_results", 'w')
-    #pickle.dump(pair_results, f)
+    import pickle
+    f = open("pair_results_benchmark", 'w')
+    pickle.dump(pair_results, f)
     return pair_results
             
             

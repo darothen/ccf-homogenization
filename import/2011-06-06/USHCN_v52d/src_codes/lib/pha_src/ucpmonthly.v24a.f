@@ -1125,7 +1125,7 @@ c                     No link back in paired stn
    55         enddo ! end do all candidates
 
 c    !!!!!! Daniel
-            call exit()
+c            call exit()
 c
 
             else if(method .eq. 2) then
@@ -1792,7 +1792,8 @@ c     number of model indices in itypshow (used for model types = 3 to 8)
       maxmo = nmo
       if(itimeres .eq. 0) maxmo = numyr
       
-      icdebug = 2
+c      icdebug = 2
+      icdebug = 10
       numtech = (hitech - lotech) + 1
 
 C     ---------------------------------------------------------------------

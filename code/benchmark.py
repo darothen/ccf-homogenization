@@ -37,38 +37,22 @@ from mw2009.chgptmodels import bayes, kth_line, t_test, lookup_critical
 
 import parameters
 
-# A sample network of 52 stations. Started with a selection of literally
-# 52 random stations from all the USHCN Coop stations, and then added
-# Cheesman and Chula Vista because the MW2009 paper actually plots those
-# two stations' monthly anomalies so I can make eyeball comparison
-test_stations = ['215887', '041912', '034572', '116738', '361354',
-                 '331152', '314684', '244522', '030936', '042941',
-                 '331890', '291515', '098535', '258133', '266779', 
-                 '324418', '427260', '086997', '449151', '181750', 
-                 '307633', '200230', '124837', '200146', '220488', 
-                 '413183', '215615', '415618', '461330', '206300', 
-                 '200779', '121747', '046399', '231037', '431243', 
-                 '411000', '302129', '240364', '111280', '043875', 
-                 '298107', '234825', '228374', '164407', '248597', 
-                 '315177', '443192', '314055', '153430', '120177', 
-                 '041758', '051528']
-
 # A Parameters object which contains the configuration for the homogenization
 # analysis - specifically, the station list, settings for determining close
 # neighbors, and settings for finding optimally correlated neighbors.
-default_params = dict(nstns=50, 
+default_params = dict(nstns=21, 
                       mindist=200.0, 
                       distinc=200.0, 
-                      numsrt=40,
-                      numcorr=20, 
-                      begyr=1899,
-                      endyr=2002, 
+                      numsrt=21,
+                      numcorr=21, 
+                      begyr=1900,
+                      endyr=2001, 
                       data_src="raw", 
-                      variable="max", 
-                      stations=test_stations,
+                      variable="avg", 
                       corrlim=0.1,
                       minpair=14,
-                      project="test network")
+                      benchmark=True,
+                      project="benchmark")
 params = parameters.default_parameters(**default_params)
 
 pprint.pprint(params)
@@ -76,7 +60,7 @@ pprint.pprint(params)
 # Read in station data (download if necessary)
 all_series, all_stations = ushcn_io.get_ushcn_data(params)
 
-if not params.stations:
+if not hasattr(params, 'stations'):
     station_ids = sorted(random.sample(all_stations.keys(), params.nstns))
 else:
     station_ids = sorted(params.stations)
@@ -133,10 +117,10 @@ dist_out.close()
 # Go through all the data we have, and replace the read-in values with
 # monthly anomalies. Then, flatten the data into a list with all the data
 # and length (endyr-begyr)*12
-for s in series.itervalues():
-    data = s.series
-    anomalies = compute_monthly_anomalies(data, -9999)
-    s.set_series(anomalies, s.years)
+#for s in series.itervalues():
+#    data = s.series
+#    anomalies = compute_monthly_anomalies(data, -9999)
+#    s.set_series(anomalies, s.years)
 
 n.update_series = series
         
@@ -145,7 +129,7 @@ print "Determining correlated neighbors"
 if os.path.exists("corr_out"):
     print "...great, I'm gonna read it from disk...",
     
-    corr_file = open("corr_out")
+    corr_file = open("data/case7.corr.ann")
     
     all_lines = corr_file.readlines()
     station_lines = all_lines[::2]
@@ -187,7 +171,7 @@ else:
     # if there are less than we hoped to find.
     print "...Assembling neighborhood correlation file\n"
     corr_out = open("corr_out", 'wb')
-    for sta_id in test_stations:
+    for sta_id in n.stations.keys():
         correlations = all_corrs[sta_id]['corr']
         sorted_neighbors = sorted(correlations.iteritems(),
                                   key=itemgetter(1), reverse=True)[:params.numcorr-1]
@@ -218,7 +202,7 @@ hom_params = dict(nstns=params.nstns,
                     end_year=params.endyr,
                     data_src=params.data_src,
                     variable=params.variable,
-                    stations=params.stations,
+                    #stations=params.stations,
                     project=params.project,
                     ######################if os.path.exists("corr_out"):
                     numyr=params.endyr-params.begyr,
@@ -243,22 +227,22 @@ hom_params = dict(nstns=params.nstns,
                     stepthres=0.0, # a temperature step limit at which these models might work
                 )
 hom_params = parameters.Parameters(**hom_params)
-#if os.path.exists("pair_results"):
-#    print "Found pair_results on disk"
-#    pair_results = pickle.load(open("pair_results", "r"))
-#else:
-#    print "Entering splitmerge to find changepoints"
-#    pair_results = splitmerge(n, **hom_params)
-pair_results = splitmerge(n, **hom_params)
+if os.path.exists("pair_results_benchmark"):
+    print "Found pair_results on disk"
+    pair_results = pickle.load(open("pair_results_benchmark", "r"))
+else:
+    print "Entering splitmerge to find changepoints"
+    pair_results = splitmerge(n, **hom_params)
+#pair_results = splitmerge(n, **hom_params)
 
 ### Try to print out the series in a table 
 import numpy as np
 #all_data = np.zeros([hom_params.nmo, hom_params.nstns])
-station_list = n.stations.keys()
+station_list = ['83000%1s' % s for s in '0123456789abcdefghijk']
 ids = station_list
 all_data = [n.raw_series[id].monthly_series for id in ids]
 all_data = np.array(all_data)
-
+#sys.exit()
 ## Attribute changepoint hits to pair arrays
 hits = np.zeros_like(all_data)
 hits_neighbors = [[list() for i in xrange(hom_params.nmo)] for i in xrange(len(ids))]
@@ -309,6 +293,14 @@ for pair in pair_results:
 #                hits_neighbors[neighbor_index][date_index].remove(culprit)
 #                hits_neighbors[station_index][date_index].remove(neighbor_id)
 #            #print hits_this_date.max(), hits_this_date
+new_hits = np.zeros_like(hits)
+while hits.max() > 1:
+    max_in_hits = hits.max()
+    max_flat_index = hits.argmax()
+    max_indices = np.unravel_index(max_flat_index, hits.shape)
+    
+    new_hits[max_indices] = max_in_hits
+    hits[max_indices] = 1    
 
 if np.any(hits < 0): raise ValueError("hits < 0")
 
@@ -335,9 +327,17 @@ for imo in xrange(hom_params.nmo):
     year, month = imo2iym(imo)
     base_str = "%4d %2d %4d |" % (year, month, imo)
     month_strs = "|".join(map(con2str, zip(all_data[:,imo],
-                                               hits[:,imo])))+"|"
-    print base_str+month_strs
+                                           new_hits[:,imo])))+"|"
+    print_month_strs = False
+    for i in range(10):
+        if str(i) in month_strs: 
+            print_month_strs = True
+            break
     
+    if print_month_strs:
+        print base_str+month_strs
+
+
 # Test plot
 #pair_str = pair_results.keys()[-1]
 #id1, id2 = pair_str.split("-")

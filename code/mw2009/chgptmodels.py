@@ -383,7 +383,7 @@ def minbic(x, y, bp_index, missing_val=-9999, models=None):
     ## Print header for BIC changepoint testing -
     left_header = " QTYP     QVAL    QRSE     QPF     MU1     MU2  ALPHA1"
     right_header = "  ALPHA2   MSTAT   MCRIT    MOFF KNT1 KNT2"
-    print (left_header+right_header)
+    #print (left_header+right_header)
     
     # The following container class will help us record computed values (like
     # errors for different models, etc) for re-use in the following tests.
@@ -432,9 +432,9 @@ def minbic(x, y, bp_index, missing_val=-9999, models=None):
     offset=output['amp_est']
     seg_lens=output['seg_lens']
     
-    print ("Post: - %2d %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %5d %5d" %
-           (iqtype, bic, sse_bic, mu[0], mu[1], slp[0], slp[1], test_stat, crit_val, offset,
-            seg_lens[0], seg_lens[1]) )
+    #print ("Post: - %2d %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %5d %5d" %
+    #       (iqtype, bic, sse_bic, mu[0], mu[1], slp[0], slp[1], test_stat, crit_val, offset,
+    #        seg_lens[0], seg_lens[1]) )
     ############################################################################ 
     
     ## Now we can double-check the analysis results and return them
@@ -512,7 +512,7 @@ def kthslr1(x, y, bp_index, vals, missing_val=-9999):
     head = "%7s %6.2f %7.2f %7.2f" % (cmodel, b_tot, b_err, b_pen)
     stats =  " %7.2f ------- %7.3f ------- ------- -------" % (y_int, slope)
     tail = " %7.2f %5d ----" % (amp_est, n_vals)
-    print (head+stats+tail)
+    #print (head+stats+tail)
     
     ## Record the results of this test
     result = dict(cmodel=cmodel,
@@ -613,7 +613,7 @@ def kthtpr0(x, y, bp_index, vals, missing_val=-9999):
     stats =  " %7.2f %7.2f ------- ------- %7.2f %7.2f" % (left_y_med, right_y_med,
                                                           t_val, t_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, n_left, n_right)
-    print (head+stats+tail)
+    #print (head+stats+tail)
     
     ## Record the results of this test
     result = dict(cmodel=cmodel,
@@ -691,6 +691,14 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
     # This method is slightly different than the kth_line() method above.
     # First, we get only the valid data, and we pair it with the natural ordering
     # of the data, i.e. 1, 2, 3...
+    ## BUG: The computation for range_all here will result in a the predictor
+    ##    dataset ultimately being equal to the order of the valid data. To
+    ##    illustrate this problem, consider the x data [1,2,3,4,5,6] and the y
+    ##    data [10, -9999, -9999, -9999, 4]. With this method, we will ultimately
+    ##    compute paired slopes with the points (1, 10) and (2, 4) when we really
+    ##    need to use the points (1, 10) and (6, 4). The difference is signficant,
+    ##    but it is an easy change - merely reproduce the valid_x and valid_y
+    ##    code from kth_line() above.
     valid_all = all_valid_data
     n_all = len(valid_all)
     range_all = range(1, n_all+1)
@@ -737,7 +745,7 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
         if (nslp%2)==1: imed = imed+1 # offset by one to right if odd
         slope_est = median(slopes)
         
-    print "slope, ic, imet: %7.2f %5d %5d" % (slope_est, nslp, imed)
+    #print "slope, ic, imet: %7.2f %5d %5d" % (slope_est, nslp, imed)
     
     # Fifth, compute the first segment intercept, y-median - slope*x-median
     # BUG: Another instance where we do not handle the case of an even number of
@@ -748,10 +756,10 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
     valid_left = sorted(valid_left)
     data_med = valid_left[imed]
     left_y_int = data_med-slope_est*range_med
-    print "Seg1 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
-                                                                       data_med,
-                                                                       slope_est,
-                                                                       left_y_int)
+    #print "Seg1 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
+    #                                                                   data_med,
+    #                                                                   slope_est,
+    #                                                                   left_y_int)
     # BUG: Again in chgptmodel.kendalltheill(), there is a bug on line 2339. Starting
     #     here, we over-write the medians we found in both lists, and use the second
     #     segment for all our computations! I reproduce that behavior here by using the
@@ -768,10 +776,10 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
     valid_right = sorted(valid_right)
     data_med = valid_right[imed]
     right_y_int = data_med-slope_est*range_med
-    print "Seg2 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
-                                                                       data_med,
-                                                                       slope_est,
-                                                                       right_y_int)
+    #print "Seg2 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
+    #                                                                   data_med,
+    #                                                                   slope_est,
+    #                                                                   right_y_int)
     
     # Seventh, we compute root mean square error of the residuals
     residuals = [missing_val]*n_all # residuals of the fit
@@ -846,8 +854,8 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
     f_crit = lookup_critical(count-3, "f1")
     b_tot, b_err, b_pen = bayes(count, sse_total, 4)
     # amplitude change estimate
-    print r_mu, r_alpha, bp_index
-    print len(range_all)
+    #print r_mu, r_alpha, bp_index
+    #print len(range_all)
     #y1 = r_mu[0] + r_alpha * range_all[bp_index+1] # end of left seg
     #y2 = r_mu[1] + r_alpha * range_all[bp_index+2] # beg of right seg
     y1 = r_mu[0] + r_alpha * range_left[-1]
@@ -859,7 +867,7 @@ def kthtpr1(x, y, bp_index, vals, missing_val=-9999):
     stats =  " %7.2f %7.2f %7.3f ------- %7.2f %7.2f" % (r_mu[0], r_mu[1],
                                                          r_alpha, f_val, f_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, n_left, n_right)
-    print (head+stats+tail)
+    #print (head+stats+tail)
     
     ## Record results of this test
     result = dict(cmodel=cmodel,
@@ -939,7 +947,7 @@ def kthtpr2(x, y, bp_index, vals, missing_val=-9999):
     count = kthl_left.nval + kthl_right.nval
     
     sse_total = kthl_left.sseslope + kthl_right.sseslope
-    print kthl_left.sseslope, kthl_right.sseslope, vals.sse_resid
+    #print kthl_left.sseslope, kthl_right.sseslope, vals.sse_resid
     
     # Compute test statistic, f2
     # Recall the residuals computed from KTHSLR1, where we assumed constant
@@ -953,7 +961,7 @@ def kthtpr2(x, y, bp_index, vals, missing_val=-9999):
                                                        kthl_left.slope, kthl_right.slope,
                                                        f2_val, f2_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, vals.n_left, vals.n_right)
-    print (head+stats+tail)       
+    #print (head+stats+tail)       
     
     ## Record result of this test
     result = dict(cmodel=cmodel,
@@ -1039,7 +1047,7 @@ def kthtpr3(x, y, bp_index, vals, missing_val):
     stats =  " %7.2f %7.2f ------- %7.3f %7.2f %7.2f" % (kthl_left.y_med, kthl_right.y_int,
                                                         kthl_right.slope, f_val, f_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, vals.n_left, vals.n_right)
-    print (head+stats+tail)
+    #print (head+stats+tail)
     
     ## Records results from this analysis
     result = dict(cmodel=cmodel,
@@ -1124,7 +1132,7 @@ def kthtpr4(x, y, bp_index, vals, missing_val):
     stats =  " %7.2f %7.2f %7.3f ------- %7.2f %7.2f" % (kthl_left.y_int, kthl_right.y_med,
                                                          kthl_left.slope, f_val, f_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, vals.n_left, vals.n_right)
-    print (head+stats+tail)
+    #print (head+stats+tail)
     
     ## Record result of this analysis
     result = dict(cmodel=cmodel,
