@@ -19,7 +19,7 @@ __docformat__ = "restructuredtext"
 # http://docs.python.org/library/math.html
 from math import log10, sqrt
 # http://docs.python.org/library/operator.html
-from operator import itemgetter
+import operator
 
 import numpy as np
 
@@ -406,7 +406,7 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None):
     ## Identify the best-fitting model computed above by finding which one has
     ## the lowest BIC value
     results = [(model, changepoint_dict[model]['bic']) for (model,_) in models]
-    results = sorted(results, key=itemgetter(1))
+    results = sorted(results, key=operator.itemgetter(1))
         
     cmodel, bic = results[0]
     output = changepoint_dict[cmodel]
@@ -757,11 +757,9 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     #    PHA. It's different from what is used in kth_line() (which is
     #    the correct way to find the median in a list of data - average the
     #    middle two values if the list length is even).
-    imed = (nslp - 1)/2
-    if (nslp%2)==1: imed = imed+1 # offset by one to right if odd
     slope_est = median(slopes)
         
-    #print "slope, ic, imet: %7.2f %5d %5d" % (slope_est, nslp, imed)
+    #print "slope, ic, imed: %7.2f %5d %5d" % (slope_est, nslp, imed)
     
     # Fifth, compute the first segment intercept, y-median - slope*x-median
     # BUG: Another instance where we do not handle the case of an even number of
@@ -1076,7 +1074,7 @@ def kthtpr3(x, y, breakpoint, missing_val, vals):
     # Compute test statistic, f1
     # Recall the residuals computed from KTHSLR1, where we assumed constant
     # slope throughout the data segment (sse_resid)
-    f_val =  ((vals.sse_resid-sse_total)/1.0)/(sse_total/(count-3))
+    f_val =  (vals.sse_resid-sse_total)/(sse_total/(count-3))
     f_crit = lookup_critical(count, "f1")
     bic, bic_error, bic_dof_penalty = bayes(count, sse_total, 4)
     # output string

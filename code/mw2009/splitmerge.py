@@ -14,7 +14,7 @@ from copy import deepcopy
 # http://docs.python.org/library/math.html
 from math import sqrt
 # http://docs.python.org/library/operator.html
-from operator import itemgetter
+import operator
 #http://docs.python.org/library/itertools.html
 from itertools import combinations
 
@@ -436,7 +436,7 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
             ## really have [(1,10), (12, 15)].
             homog_segs.extend(new_homog_segs)
             if homog_segs:
-                homog_segs = sorted(homog_segs, key=itemgetter(0))
+                homog_segs = sorted(homog_segs, key=operator.itemgetter(0))
                 final_homog_segs = [homog_segs[0], ] # this will be like a stack
                 for seg in homog_segs[1:]:
                     last_seg = final_homog_segs[-1]

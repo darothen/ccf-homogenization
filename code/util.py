@@ -16,7 +16,8 @@ from math import cos, acos, sin, radians, sqrt
 from copy import deepcopy
 import random
 # http://docs.python.org/library/operator.html
-from operator import itemgetter
+import operator
+
 # ccf-homogenization imports
 from parameters import RADIUS_EARTH
 
@@ -343,7 +344,7 @@ def compute_monthly_anomalies(yearly_data, missing_val=-9999):
     for imonth in xrange(nmonths):
         
         # Get **all** the data for this month, *except* for the first year
-        all_months_data = map(itemgetter(imonth), yearly_data)
+        all_months_data = map(operator.itemgetter(imonth), yearly_data)
         month_mean = compute_mean(all_months_data[1:], missing_val)
         
         # If this is the first month (first time through the loop), then
