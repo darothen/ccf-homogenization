@@ -9,9 +9,15 @@ model types during splitmerge process
 
 GLOSSARY OF ABBREVIATIONS -
 
+breakpoint/changepoint - Same meaning; an index in a dataset where it is hypothesized
+    that either the mean in the data or the linear trend in the data changes.
 BIC - Bayes Information Criterion; test statistic for evaluating test statistics
 KTH - Kendall-Theill robust line fit method 
     (http://en.wikipedia.org/wiki/Theil%E2%80%93Sen_estimator)
+TPR - two-phase regression; the process of fitting separate linear regressions
+    to a set of data on each side of a suspected discontinuity
+SLR - Straight-line regression; the normal process of fitting a linear
+    regression to a set of data
 
 """
 __docformat__ = "restructuredtext"
@@ -356,6 +362,11 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None):
             A two-element tuple containing the slope of the regression fit to
             the left and right segments of the data.
             
+    ...
+    
+    :Raises AssertionError:
+        If the length of x and y are not equal.
+            
     """    
     ## Figure out what changepoint models to test for. A default is defined
     ## here if no models were specified by the user.
@@ -427,15 +438,18 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None):
     #        seg_lens[0], seg_lens[1]) )
     ############################################################################ 
     
-    ## Now we can double-check the analysis results and return them
+    ## Return the details of the best-fitting model
     # The slopes from each left/right segment
     kthl_left = vals.left_kth_regress
     kthl_right = vals.right_kth_regress
     slopes = [kthl_left.slope, kthl_right.slope] 
     # The amplitude change. We need to use the simple one from 'KTHTPR0' if a
-    # more complex two-phase regression was the best fit.
+    # more complex two-phase regression was the best fit - we want the step 
+    # change in the median values of the data on each side. This is a more 
+    # robust estimate of the center of the data than the mean is and let's us
+    # see how big the jump is before and after the breakpoint.
     if 'TPR' in cmodel:
-        offset = vals.tpr_offset
+        offset = kthl_left.y_med - kthl_right.y_med
     else:
         offset = output['amp_est']
     # Z-score for offset, normalized about the sum square error of the residuals
@@ -470,25 +484,32 @@ def kthslr1(x, y, breakpoint, missing_val, vals):
     :Returns:
         result, a dictionary with the following fields:
             :Param cmodel:
-                The name of the test ('KTHSLR1')
+                The name of the test ('KTHSLR1').
             :Param bic: 
-                The Bayes Information Criterion statistic for this analysis
+                The Bayes Information Criterion statistic for this analysis.
             :Param mu: 
-                A 2-value tuple with the y-intercepts of the regression here
+                A 2-value tuple with the y-intercepts of the regression here. 
+                Since the y-intercept computed here is for the regression fit 
+                to the entire dataset, mu will be [computed_intercept, computed_intercept].
             :Param alpha: 
                 A 2-value tuple with the computed slopes of the regressions 
-                here
+                here. Since the regression fit here is for the entire data set,
+                alpha will be [computed_slope, computed_slope]
             :Param sse_bic: 
-                The sum square error on the computed BIC value
+                The sum square error on the computed BIC values.
             :Param seg_lens: 
                 A 2-value tuple with the length of the segments in the 
-                regressions here
+                regressions here. Since we consider the whole dataset here, will
+                be [total_length, 0].
             :Param test_stat: 
-                The test statistic value computed here
+                The test statistic value computed here. 0.0 by default since no
+                test is being performed.
             :Param crit_val: 
-                The critical value for the test statistic at alpha=0.05.
+                The critical value for the test statistic at alpha=0.05. 0.0 by
+                default since no test is being performed.
             :Param amp_est: 
-                An estimate of the changepoint amplitude
+                An estimate of the changepoint amplitude. 0.0 by default since
+                we are assuming there is no step change in the data.
         vals, the original 'Values' object provided to this method with the
             following modifications:
             added vals.sse_resid - the sum square error on the residuals from this
@@ -560,25 +581,28 @@ def kthtpr0(x, y, breakpoint, missing_val, vals):
     :Returns:
         result, a dictionary with the following fields:
             :Param cmodel:
-                The name of the test ('KTHSLR1')
+                The name of the test ('KTHTPR0')
             :Param bic: 
-                The Bayes Information Criterion statistic for this analysis
+                The Bayes Information Criterion statistic for this analysis.
             :Param mu: 
-                A 2-value tuple with the y-intercepts of the regression here
+                A 2-value tuple with the y-intercepts of the regression here.
+                Should be [left segment y-intercept, right segment y-intercept].
             :Param alpha: 
                 A 2-value tuple with the computed slopes of the regressions 
-                here
+                here. Should be [left segment slope, right segment slope].
             :Param sse_bic: 
-                The sum square error on the computed BIC value
+                The sum square error on the computed BIC value.
             :Param seg_lens: 
                 A 2-value tuple with the length of the segments in the 
-                regressions here
+                regressions here. Should be [length of left segment, length of
+                right segment].
             :Param test_stat: 
-                The test statistic value computed here
+                The test statistic value computed here.
             :Param crit_val: 
                 The critical value for the test statistic at alpha=0.05.
             :Param amp_est: 
-                An estimate of the changepoint amplitude
+                An estimate of the changepoint amplitude based on the medians
+                of the left and right segments.
         vals, the original 'Values' object provided to this method with the
             following modifications:
             added vals.left_kth_regress - the regression fit on the left 
@@ -678,25 +702,26 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     :Returns:
         result, a dictionary with the following fields:
             :Param cmodel:
-                The name of the test ('KTHSLR1')
+                The name of the test ('KTHTPR1').
             :Param bic: 
-                The Bayes Information Criterion statistic for this analysis
+                The Bayes Information Criterion statistic for this analysis.
             :Param mu: 
-                A 2-value tuple with the y-intercepts of the regression here
+                A 2-value tuple with the y-intercepts of the regression fit to
+                the segment on each side of the breakpoint.
             :Param alpha: 
                 A 2-value tuple with the computed slopes of the regressions 
-                here
+                here fit on each side of the breakpoint.
             :Param sse_bic: 
-                The sum square error on the computed BIC value
+                The sum square error on the computed BIC value.
             :Param seg_lens: 
                 A 2-value tuple with the length of the segments in the 
-                regressions here
+                regressions here on each side of the breakpoint.
             :Param test_stat: 
-                The test statistic value computed here
+                The test statistic value computed here.
             :Param crit_val: 
                 The critical value for the test statistic at alpha=0.05.
             :Param amp_est: 
-                An estimate of the changepoint amplitude
+                An estimate of the changepoint amplitude.
         vals, the original 'Values' object provided to this method with no
             modifications.
                 
@@ -926,25 +951,25 @@ def kthtpr2(x, y, breakpoint, missing_val, vals):
     :Returns:
         result, a dictionary with the following fields:
             :Param cmodel:
-                The name of the test ('KTHSLR1')
+                The name of the test ('KTHTPR2').
             :Param bic: 
-                The Bayes Information Criterion statistic for this analysis
+                The Bayes Information Criterion statistic for this analysis.
             :Param mu: 
-                A 2-value tuple with the y-intercepts of the regression here
+                A 2-value tuple with the y-intercepts of the regression here.
             :Param alpha: 
-                A 2-value tuple with the computed slopes of the regressions 
-                here
+                A 2-value tuple with the computed slopes of the regressions .
+                here.
             :Param sse_bic: 
-                The sum square error on the computed BIC value
+                The sum square error on the computed BIC value.
             :Param seg_lens: 
                 A 2-value tuple with the length of the segments in the 
-                regressions here
+                regressions here.
             :Param test_stat: 
-                The test statistic value computed here
+                The test statistic value computed here.
             :Param crit_val: 
                 The critical value for the test statistic at alpha=0.05.
             :Param amp_est: 
-                An estimate of the changepoint amplitude
+                An estimate of the changepoint amplitude.
         vals, the original 'Values' object provided to this method with no
             modifications.
                 
@@ -1032,25 +1057,25 @@ def kthtpr3(x, y, breakpoint, missing_val, vals):
     :Returns:
         result, a dictionary with the following fields:
             :Param cmodel:
-                The name of the test ('KTHSLR1')
+                The name of the test ('KTHTPR3').
             :Param bic: 
-                The Bayes Information Criterion statistic for this analysis
+                The Bayes Information Criterion statistic for this analysis.
             :Param mu: 
-                A 2-value tuple with the y-intercepts of the regression here
+                A 2-value tuple with the y-intercepts of the regression here.
             :Param alpha: 
                 A 2-value tuple with the computed slopes of the regressions 
-                here
+                here.
             :Param sse_bic: 
-                The sum square error on the computed BIC value
+                The sum square error on the computed BIC value.
             :Param seg_lens: 
                 A 2-value tuple with the length of the segments in the 
-                regressions here
+                regressions here.
             :Param test_stat: 
-                The test statistic value computed here
+                The test statistic value computed here.
             :Param crit_val: 
                 The critical value for the test statistic at alpha=0.05.
             :Param amp_est: 
-                An estimate of the changepoint amplitude
+                An estimate of the changepoint amplitude.
         vals, the original 'Values' object provided to this method with no
             modifications.
                 
@@ -1129,7 +1154,7 @@ def kthtpr4(x, y, breakpoint, missing_val, vals):
     :Returns:
         result, a dictionary with the following fields:
             :Param cmodel:
-                The name of the test ('KTHSLR1')
+                The name of the test ('KTHTPR4')
             :Param bic: 
                 The Bayes Information Criterion statistic for this analysis
             :Param mu: 
