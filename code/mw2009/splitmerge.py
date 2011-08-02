@@ -21,9 +21,11 @@ from itertools import combinations
 import time
 
 # ccf-homogenization imports
-from util import get_valid_data, compute_mean
+from util import get_valid_data, compute_mean, sign
 from util import scale_series, compute_monthly_anomalies, imo2iym, within
 from mw2009.chgptmodels import minbic
+
+MINLEN = 18
 
 def diff(data1, data2, missing_val=-9999):
     """Computes the difference series between data1 and data2.
@@ -222,8 +224,8 @@ def snht(data, missing_val=-9999, valid_count=None, standardized=False):
                 break
             
             ## Compute and store test statistics
-            if pivot == valid_count-2:
-                print nleft, mean_left, sum_left, nright, mean_right, sum_right
+            #if pivot == valid_count-2:
+            #    print nleft, mean_left, sum_left, nright, mean_right, sum_right
             ts[pivot] = nleft*(mean_left**2) + nright*(mean_right**2)
     
     return ts
@@ -232,28 +234,43 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
     
     ## EXPERIMENTAL PLACEHOLDERS - will eventually be replaced with a master
     ## loop to do all the id pairs.
-    id_list = sorted(network.stations)
-    #id_list = id_list[0:2]
+    id_list = network.stations.keys()
     pair_results = dict()
     
-    # Generate the station pairs by considering the correlated neighbors for
-    # each station in id_list. Since it's possible that two stations could be
-    # correlated with each other, will try to avoid duplicates here to avoid
-    # excessive computations
-    pairs = set()
-    for id1 in id_list:
-        for id2 in network.correlations[id1]:
-            ordered_pair = tuple(sorted((id1, id2)))
-            pairs.add(ordered_pair)
+    def dict_to_tuples(d):
+        keys = d.keys()
+        return [(key, d[key]) for key in keys]
+    ## Generate station pairs for use in splitmerge by iteratively going through the
+    ## station_list and adding stations in order of decreasing correlation. Skip a 
+    ## neighbor if the pair is already present; want 20 stations or until all the
+    ## correlated neighbors are used up.
+#    pairs = []
+#    for id1 in id_list:
+#        neighbors = dict_to_tuples(network.correlations[id1])
+#        sorted_neighbors = sorted(neighbors, key=operator.itemgetter(1))
+#        added_pairs = 0
+#        while sorted_neighbors and (added_pairs < 5):
+#            id2, _ = sorted_neighbors.pop()
+#            ordered_pair = tuple(sorted((id1, id2)))
+#            if not ordered_pair in pairs:
+#                pairs.append(ordered_pair)
+#                added_pairs += 1
+    import pickle
+    pairs = list(pickle.load(open("fortran_pairs", "r")))
+    #pairs = [('314684', '315177'),
+    #         ('086997', '314684'), 
+    #         ('307633', '314684'),
+    #         ('124837', '324418'),
+    #         ('164407', '314055')]
+    #pairs = [('116738', '231037'), ]
     
-    #id1 = "215615"
-    #id2 = "215887"
-    #for (id1, id2) in combinations(id_list, 2): # this does ALL combinations
     for (id1, id2) in pairs:
-    #for (id1, id2) in [(id1, id2)]:
         print "Pair %s with %s" % (id1, id2)
+        #continue
         pair_str = "%6s-%6s" % (id1, id2)
         #if pair_str != "830006-830009":
+        #if pair_str != "215615-215887":
+        #if pair_str != "111280-124837":
         #    continue
         
         raw_series = network.raw_series
@@ -280,9 +297,9 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         data2 = series2.monthly_series
         
         
-        print data1[:50]
-        print data2[:50]
-        print "################################################################"
+        #print data1[:50]
+        #print data2[:50]
+        #print "################################################################"
         ## Compute the difference series        
         diff_data = diff(data1, data2)
         MISS = series1.MISSING_VAL # Missing value placeholder
@@ -300,12 +317,12 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         last = 0
         for (i, d1, d2) in zip(xrange(num_months), data1, data2):
             if d1!=MISS and d2!=MISS:
-                #if first < 12:
-                #    first = i
-                #    #first_set = True
-                if not first_set:
+                if first < 12:
                     first = i
-                    first_set = True
+                    #first_set = True
+                #if not first_set:
+                #    first = i
+                #    first_set = True
                 last = i
                 
         ## Set the initial breakpoints and the list of already-found, homogenous
@@ -377,8 +394,8 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
             ## that in snht(), but we'll do it right now so we can inspect those
             ## standardized values later.
                 z = standardize(segment, MISS)
-                print segment[:50]
-                print z[:50]
+                #print segment[:50]
+                #print z[:50]
                 
             ## Apply standard normal homogeneity test. 
             ## For mechanics, see Alexandersson and Moberg 1997, Int'l Jrnl of
@@ -617,72 +634,6 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         elapsed = (time.clock() - start)
         print "ELAPSED TIME - %2.3e" % elapsed
         #print new_bp_dict
-        
-####################################
-##### THREADING
-#        import threading
-#        from Queue import Queue
-#        class MinBicComputer(threading.Thread):
-#            def __init__(self, left, bp, right, diff_data):
-#                if left != first:
-#                    self.left = left + 1
-#                else:
-#                    self.left = left
-#                self.bp = bp
-#                self.right = right
-#                self.diff_data = diff_data
-#                threading.Thread.__init__(self)
-#            
-#            def get_result(self):
-#                return (self.bp, self.result)
-#        
-#            def run(self):
-#                total_shift = -12 + 1
-#                
-#                left_shift, right_shift = self.left+total_shift, self.right+total_shift
-#                bp_shift = self.bp + total_shift
-#                y1, m1 = imo2iym(self.left)
-#                yb, mb = imo2iym(self.bp)
-#                y2, m2 = imo2iym(self.right)
-#                
-#                print "Entering MINBIC - %4d %2d    %4d %2d    %4d %2d" % (y1, m1, yb,
-#                                                                           mb, y2, m2)
-#                
-#                (seg_x, seg_data) = range(left_shift, right_shift+1), diff_data[self.left:self.right+1]
-#                bp_index = self.bp-self.left
-#                bp_analysis = minbic(seg_x, seg_data, bp_index, MISS)
-#                
-#                self.result = bp_analysis          
-#        
-#        def compute_minbic(lefts, bps, rights, diff_data):
-#            def producer(q, lefts, bps, rights, diff_data):
-#                for (left, bp, right) in zip(lefts, bps, rights):
-#                    thread = MinBicComputer(left, bp, right, diff_data)
-#                    thread.start()
-#                    q.put(thread, True)
-#                    
-#            finished = dict()
-#            def consumer(q, bps):
-#                while len(finished) < bps:
-#                    thread = q.get(True)
-#                    thread.join()
-#                    bp, res = thread.get_result()
-#                    finished[bp] = res
-#            
-#            q = Queue(len(bps))
-#            prod_thread = threading.Thread(target=producer, args=(q, lefts, bps, rights, diff_data))
-#            cons_thread = threading.Thread(target=consumer, args=(q, len(bps)))
-#            prod_thread.start()
-#            cons_thread.start()
-#            prod_thread.join()
-#            cons_thread.join()
-#            return finished
-#            
-#        lefts, bps, rights = breakpoints[0:-2], breakpoints[1:-1], breakpoints[2:]
-#        start = time.clock()
-#        bp_dictionary = compute_minbic(lefts, bps, rights, diff_data)
-#        elapsed1 = (time.clock() - start)
-#        print "ELAPSED TIME = %3.2e" % elapsed1
 ####################################
 ##### NORMAL        
 #        start = time.clock()
@@ -716,9 +667,11 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
 #        print "ELAPSED TIME = %3.2e" % elapsed2
         
         ##################################3
-        ## Final stage - print the adjustment summaries
+        ## Print the adjustment summaries
         bp_dictionary = multi_bp_dict
         sorted_bps = sorted(bp_dictionary.keys())
+        ndelete = []
+        valid_bps = {}
         for bp in sorted_bps:
             stats = bp_dictionary[bp]
             
@@ -733,21 +686,182 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
             beg2 = bp+1
             y_beg2, m_beg2 = imo2iym(beg2)
             
-            # If cmodel is *SLR1, then there is no breakpoint
-            if 'SLR1' in cmodel:
+            # If cmodel is *SLR*, then there is no breakpoint
+            if 'SLR' in cmodel:
                 print ("%s-%s  --  -- MD TESTSEG SKIP: %7.2f %5d %5d %3d %5d %5d %3d" %
                        (id1, id2, asigx, end1, y_end1, m_end1, beg2, y_beg2, m_beg2))
+                # Don't store it!
             else:
                 print ("%6s-%6s  --  -- MD TESTSEG ADJ: %7.2f %7.2f %8.4f %8.4f %5d %5d %3d %5d %5d %3d %2d" % 
                        (id1,id2, asigx, azscr, rslp[0], rslp[1], end1, y_end1, m_end1, beg2, y_beg2, m_beg2, iqtype))
+                # Store it!
+                valid_bps[bp] = stats
+        
+        ###############################
+        ## Go back and see if we can get rid of some of the change points.
+        ## If 2 or more of the chgpts are within MINLEN,
+        ##    a) if the chgpt estimates are the same sign, then test each
+        ##        singly with same endpoints and keep lowest BIC 
+        ##    b) if not the same sign,
+        ##        retain earliest changepoint
+        # add the first, last to valid_bps
+        interior_bps = valid_bps.keys()
+        # Add first, last if not already in interior_bps
+        for bp in [first, last]:
+            if bp not in interior_bps:
+                interior_bps.append(bp)
+        sorted_bps = sorted(interior_bps)
+        for left in sorted_bps:
+            print sorted_bps, left
+            ## We're looking for the next interim breakpoint that satisfies two
+            ## conditions:
+            ##    1) at least MINLEN valid data (non-missing to the right)
+            ##    2) has at least one breakpoint between 'left' and it
+            right = 0
+            close_bps = []
+            for right in sorted_bps: 
+                if right <= left: continue
+                
+                if not close_bps:
+                    close_bps.append(right)
+                else:
+                    valid_between_bps = diff_data[close_bps[-1]:right]
+                    valid_length = len(get_valid_data(valid_between_bps, MISS))
+                    print imo2iym(close_bps[-1]),valid_length,imo2iym(right)
+                    if valid_length > MINLEN:
+                        break
+                    close_bps.append(right)
+            # We could actually run out of things in sorted_bps, and wind up with
+            # right == close_bps[-1]. Detect that and break out of this analysis
+            # if that happens.
+            if close_bps[-1]==right: break
+            
+            if left != first:
+                left = left + 1
+            close_bp_results = {}
+            for bp in close_bps:
+                        
+#                # recall that we only consider data after the first full year. we will be 
+#                # computing regressions with the independent variable indexed from this 
+#                # starting point, so we need to shift these indices. we also need to shift them
+#                # by +1 if this is any segment beyond the first one, so that we don't include
+#                # changepoints in more than one analysis.
+#                # TOTAL_SHIFT = -12 + 1 = -11
+#                # 
+#                # However, this shift is only necessary while looking at the array indices that
+#                # we generate using range(). the data should already be aligned correctly.
+                total_shift = -12 + 1
+                left_shift, bp_shift, right_shift = left+total_shift, bp+total_shift, right+total_shift
+                y1, m1 = imo2iym(left)
+                yb, mb = imo2iym(bp)
+                y2, m2 = imo2iym(right)
+                
+                print ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+                print y1,m1,"-",yb,mb,"-",y2,m2
+                print "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+                
+                (seg_x, seg_data) = range(left_shift, right_shift+1), diff_data[left:right+1]
+                bp_index = bp-left
+                bp_analysis = minbic(seg_x, seg_data, bp_index, MISS, kthslr0_on=True)
+                
+                cmodel=bp_analysis['cmodel']
+                iqtype= bp_analysis['iqtype']
+                offset= bp_analysis['offset']
+                rslp= bp_analysis['slopes']
+                crit_val = bp_analysis['crit_val']
+                test_stat = bp_analysis['test_stat']
+                bic = bp_analysis['bic']
+                
+                print ("Interim chgpt: %s %4d %2d %4d %2d %4d %2d %8.2f %8.2f %8.2f %8.2f %7.3f %7.3f %2d" %
+                       (pair_str, y1, m1, yb, mb, y2, m2, bic, test_stat, crit_val, offset, rslp[0], rslp[1], iqtype))                    
+                
+                close_bp_results[bp] = bp_analysis
+
+            # Now we have a small problem... we might have more than one breakpoint,
+            # so we need to choose which one is best. We will check the sign of
+            # the breakpoint amplitude changes:
+            sign_of_amps = map(sign, [close_bp_results[bp]['offset'] for bp in close_bps])
+            positive = lambda x: sign(x) >= 0
+            negative = lambda x: sign(x) <= 0
+            zero = lambda x: sign(x) == 0
+            print "------------>",[close_bp_results[bp]['offset'] for bp in close_bps]
+            if (all(map(positive, sign_of_amps)) or 
+                all(map(negative, sign_of_amps))):    
+                # Pick the best (minimum BIC)          
+                bics = [(bp, close_bp_results[bp]['bic']) for bp in close_bps]
+                sorted_bics = sorted(bics, key=operator.itemgetter(1))
+                smallest_bp = sorted_bics[0][0]
+                
+                # Remove this smallest-bic bp from the in-interval bps 
+                close_bps.remove(smallest_bp)
+                valid_bps[smallest_bp] = close_bp_results[smallest_bp] 
+                
+                #print "leftovers",close_bps
+                for bp in close_bps: # The remaining bps which we will reject
+                    sorted_bps.remove(bp) # Remove them from this loop
+                    del valid_bps[bp] # Remove them as valid 
+                    
+                yb, mb = imo2iym(smallest_bp)
+                print ("Same domain - Lowest Interim: %s %4d %2d" % 
+                       (pair_str, yb, mb))
+            elif (all(map(zero, sign_of_amps))):
+                # Choose the earliest changepoint; the rest of these have
+                # amplitude changes which are 0.
+                first_bp, last_bp = close_bps[0], close_bps[-1]
+                
+                # Remove the first interim bp and update valid_bps with this new
+                # computation. 
+                close_bps.remove(first_bp)
+                valid_bps[first_bp] = close_bp_results[first_bp]
+                
+                # Reject remaining interim bps
+                for bp in close_bps:
+                    sorted_bps.remove(bp)
+                #    del valid_bps[bp]
+                    
+                yb, mb = imo2iym(first_bp)
+                print ("Null domain - Earliest Interim : %s %4d %2d" %
+                       (pair_str, yb, mb))
+            else:
+                # We'll use the earliest interim changepoint, but we need
+                # to get rid of bad data. Replace all the data between the 
+                # interim changepoints as missing and re-compute BIC.
+                first_bp, last_bp = close_bps[0], close_bps[-1]
+                first_bp_index = first_bp-left
+                last_bp_index = last_bp-left
+                
+                print len(seg_x), len(seg_data)
+                print first_bp_index+1, last_bp_index+1
+                print left, bp, right
+                for i in range(first_bp_index+1, last_bp_index+1):
+                    print i
+                    seg_x[i] = MISS
+                    seg_data[i] = MISS
+                    ndelete.append(i)
+                bp_analysis = minbic(seg_x, seg_data, first_bp_index, MISS, kthslr0_on=True)
+                
+                # Remove the first interim bp and update valid_bps with this new
+                # computation. 
+                close_bps.remove(first_bp)
+                valid_bps[first_bp] = bp_analysis
+                
+                # Reject remaining interim bps
+                for bp in close_bps:
+                    sorted_bps.remove(bp)
+                #    del valid_bps[bp]
+                
+                yb, mb = imo2iym(first_bp)
+                print ("Diff domain - Earliest Interim : %s %4d %2d" %
+                       (pair_str, yb, mb))                
     
-        pair_results[pair_str] = bp_dictionary
+        valid_bps['del'] = ndelete
+        pair_results[pair_str] = valid_bps
         
         #print "ELAPSED TIMES = %3.2e %3.2e" % (elapsed1, elapsed2)
     print "done"
     ##
     import pickle
-    f = open("pair_results_benchmark", 'w')
+    f = open("pair_results", 'w')
     pickle.dump(pair_results, f)
     return pair_results
             

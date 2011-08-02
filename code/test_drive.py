@@ -25,7 +25,7 @@ import ushcn_io
 from ushcn_data import Network
 
 from util import compute_monthly_anomalies, scale_series, get_valid_data
-from util import compute_mean
+from util import compute_mean, imo2iym
 
 from mw2009.preprocess import find_neighborhood, neighborhood_strings
 from mw2009.preprocess import find_correlations
@@ -60,15 +60,17 @@ default_params = dict(nstns=50,
                       mindist=200.0, 
                       distinc=200.0, 
                       numsrt=40,
-                      numcorr=20, 
-                      begyr=1899,
-                      endyr=2002, 
+                      numcorr=40, 
+                      begyr=1900,
+                      endyr=2010, 
                       data_src="raw", 
                       variable="max", 
                       stations=test_stations,
                       corrlim=0.1,
                       minpair=14,
-                      project="test network")
+                      project="test network",
+                      corr_file="corr_out_40",
+                      dist_file="dist_out")
 params = parameters.default_parameters(**default_params)
 
 pprint.pprint(params)
@@ -117,7 +119,7 @@ n.neighborhoods = all_neighbors
 # written here is garbage. It should not be a problem for coding MW2009, though,
 # because I can find information about stations dynamically and easily.
 print "...Assembling neighborhood output file"
-dist_out = open("dist_out", 'wb')
+dist_out = open(params.dist_file, 'wb')
 
 for station in stations_list:
     print "   ", station
@@ -142,10 +144,10 @@ n.update_series = series
         
 print "Determining correlated neighbors"
 
-if os.path.exists("corr_out"):
+if os.path.exists(params.corr_file):
     print "...great, I'm gonna read it from disk...",
     
-    corr_file = open("corr_out")
+    corr_file = open(params.corr_file)
     
     all_lines = corr_file.readlines()
     station_lines = all_lines[::2]
@@ -186,7 +188,7 @@ else:
     # and I don't bother to pad the output file with bogus stations and correlations
     # if there are less than we hoped to find.
     print "...Assembling neighborhood correlation file\n"
-    corr_out = open("corr_out", 'wb')
+    corr_out = open(params.corr_file, 'wb')
     for sta_id in test_stations:
         correlations = all_corrs[sta_id]['corr']
         sorted_neighbors = sorted(correlations.iteritems(),
@@ -243,13 +245,26 @@ hom_params = dict(nstns=params.nstns,
                     stepthres=0.0, # a temperature step limit at which these models might work
                 )
 hom_params = parameters.Parameters(**hom_params)
-#if os.path.exists("pair_results"):
-#    print "Found pair_results on disk"
-#    pair_results = pickle.load(open("pair_results", "r"))
-#else:
-#    print "Entering splitmerge to find changepoints"
-#    pair_results = splitmerge(n, **hom_params)
-pair_results = splitmerge(n, **hom_params)
+read = False
+if os.path.exists("pair_results") and read:
+    print "Found pair_results on disk"
+    pair_results = pickle.load(open("pair_results", "r"))
+else:
+    print "Entering splitmerge to find changepoints"
+    pair_results = splitmerge(n, **hom_params)
+    
+## TEMP TEMP TEMP - remove slr hits from pair_results:
+for pair_str in pair_results.keys():
+    
+    for bp in pair_results[pair_str].keys():
+        if bp == 'del': 
+            continue
+        
+        delete_bps = []
+        if pair_results[pair_str][bp]['iqtype'] < 2:
+            delete_bps.append(bp)
+        for bp in delete_bps:
+            del pair_results[pair_str][bp]
 
 ### Try to print out the series in a table 
 import numpy as np
@@ -268,48 +283,61 @@ for pair in pair_results:
     
     result = pair_results[pair]
     for (bp, result) in result.iteritems():
-        if result['iqtype'] >= 3:
+        if bp == 'del':
+            print pair_str, pair_results[pair_str]['del']
+            for bp in pair_results[pair_str]['del']:
+                hits[id1_ind, bp] += 1
+                hits[id2_ind, bp] += 1
+        elif result['iqtype'] != 2:
             hits[id1_ind, bp] += 1
             hits[id2_ind, bp] += 1
             
             hits_neighbors[id1_ind][bp].append(id2)
             hits_neighbors[id2_ind][bp].append(id1)
-#sys.exit()
-## "Unconfounding" process
-#while hits.max() > 1:
-#for i in [1, 2, 3, 4]:
 ################################################################################
-#    for date_index in range(hits.shape[1]):
-#        print date_index
-#        ## The station/date with the highest overall changepoint count is identified
-#        #max_flat_index = hits.argmax()
-#        #max_indices = np.unravel_index(max_flat_index, hits.shape)
-#        #assert hits[max_indices] == hits.max()
-#        
-#        
-#        hits_this_date = hits[:,date_index]
-#        #print hits_this_date.max(), hits_this_date
-#        while hits_this_date.max() > 1:
-#            station_index = hits_this_date.argmax()
-#            #print station_index, date_index, hits_this_date[station_index]     
-#            #print max_indices, hits.max()
-#            
-#            ## This station is the "culprit" - the cause of the breakpoints at this date
-#            #station_index, date_index = max_indices
-#            culprit = station_list[station_index]
-#            
-#            effected_neighbors = hits_neighbors[station_index][date_index]
-#            ## The count on this date is decremented for all the culprit's neighbors
-#            for neighbor_id in effected_neighbors:
-#                neighbor_index = station_list.index(neighbor_id)
-#                
-#                hits[neighbor_index, date_index] -= 1
-#                hits[station_index, date_index] -= 1
-#    
-#                hits_neighbors[neighbor_index][date_index].remove(culprit)
-#                hits_neighbors[station_index][date_index].remove(neighbor_id)
-#            #print hits_this_date.max(), hits_this_date
+## PRE FILTER 1
 
+################################################################################
+## FILTER 1 TEST
+new_hits = np.zeros_like(hits)
+
+#for imo in range(hits.shape[1]):
+#    hits_month = hits[:,imo]
+#    while hits_month.max() > 1:
+#        max_in_hits = hits_month.max()
+#        station_index = hits_month.argmax()
+#    
+#        station_id = station_list[station_index]
+#        iy, im = imo2iym(imo)
+#        
+#        ## Find entries in pair_results with this station and a changepoint on this
+#        ## date
+#        pr_keys = [key for key in pair_results if (station_id in key and
+#                                                   imo in pair_results[key])]
+#        if not pr_keys: continue
+#        offset_sum, offset_z_sum, count = 0.0, 0.0, 0.0
+#        for key in pr_keys:
+#            bp_summary = pair_results[key][imo]
+#            if 'SLR' in bp_summary['cmodel']:
+#                continue
+#            id1, id2 = key.split("-")
+#            
+#            offset, offset_z = bp_summary['offset'], bp_summary['offset_z']
+#            if station_id == id2: 
+#                offset = offset*-1.0
+#                
+#            offset_sum += offset
+#            offset_z_sum += abs(offset_z)
+#            count += 1
+#        avg_offset = offset_sum/count
+#        avg_offset_z = offset_z_sum/count
+#        
+#        print ("  -- %s-CONFRM MW1 at %5d %4d %2d AVG ADJ: %3.2f %2.2f %3d" % 
+#               (station_id, imo, iy, im, avg_offset, avg_offset_z, max_in_hits))
+#        
+#        new_hits[station_index,imo] = max_in_hits
+#        #hits[station_index,imo] = 1
+#        hits_month[station_index] = 1
 if np.any(hits < 0): raise ValueError("hits < 0")
 
 ## Print header - 
@@ -319,13 +347,12 @@ print head1
 print head2
 
 ## Print monthly series basic
-from util import imo2iym
 #con2str = lambda val, miss=-9999: "---" if val != miss else "-x-"
 def con2str(data, missing_val=-9999):
     val, hits = data
-    if val == missing_val:
-        return "-x-"
-    elif hits > 0:
+    #if val == missing_val:
+    #    return "-x-"
+    if hits > 0:
         return "%3d" % hits
     else:
         return "---"
@@ -333,10 +360,17 @@ def con2str(data, missing_val=-9999):
 for imo in xrange(hom_params.nmo):
 #for imo in xrange(10):
     year, month = imo2iym(imo)
-    base_str = "%4d %2d %4d |" % (year, month, imo)
+    base_str = "%4d %2d %4d |" % (year, month, imo+11)
     month_strs = "|".join(map(con2str, zip(all_data[:,imo],
-                                               hits[:,imo])))+"|"
-    print base_str+month_strs
+                                           hits[:,imo])))+"|"
+    print_month_strs = False
+    for i in range(10):
+        if str(i) in month_strs: 
+            print_month_strs = True
+            break
+    
+    if print_month_strs:
+        print base_str+month_strs
     
 # Test plot
 #pair_str = pair_results.keys()[-1]

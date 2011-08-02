@@ -42,6 +42,7 @@ c        parameter (slpmthmax = .27)
 c       Minimum number of years(months) for an estimate window
 c       for Monthly
         parameter (minlen = 18)
+c	parameter (minlen = 0)
 c       reset for the minimum statistical tests (see LR_max stat file)
 c       FOR ANNUAL!!!!!
 c        parameter (minlen = 3)

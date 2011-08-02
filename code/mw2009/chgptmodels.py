@@ -145,13 +145,11 @@ def kth_line(x, y, missing_val=-9999):
         
     # calculate paired slopes, find median value
     if nval > 0:
-        nslp = 0
         slopes = []
         for i in range(nval-1):
             for j in range(i, nval):
                 if good_x[i] != good_x[j]:
-                    nslp += 1
-                    slopes.append( (good_y[j]-good_y[i])/(good_x[j]-good_x[i]) )   
+                    slopes.append( (good_y[j]-good_y[i])/(good_x[j]-good_x[i]) )  
         slope = np.median(slopes)
         
     # calculate y-intercept; use original lists so we can get true median
@@ -173,9 +171,9 @@ def kth_line(x, y, missing_val=-9999):
     sseflat = 0.0
     sseslope = 0.0
     for (x_val, y_val) in good_data:
-        sseflat = sseflat + (y_med - y_val)**2
+        sseflat += (y_med - y_val)**2
         resid = (y_int + slope*x_val) - y_val
-        sseslope = sseslope + resid**2
+        sseslope += resid**2
     
     # return a Stats object with these computed values
     return Stats(test_name="kth-line", x_med=x_med, y_med=y_med, slope=slope,
@@ -315,7 +313,7 @@ def lookup_critical(n, stat="t"):
         
         return (crit_left + slope*(n-thresh_left))
 
-def minbic(x, y, breakpoint, missing_val=-9999, models=None):
+def minbic(x, y, breakpoint, missing_val=-9999, models=None, kthslr0_on=False):
     """Performs a changepoint-detection analysis to classify a suspected
     changepoint as one of a given list of model types.
     
@@ -373,7 +371,6 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None):
     if not models:
         models = [
                 # Homogeneous linear types -
-                   #('KTHSLR0', kthslr0) # simple flat line
                     ('KTHSLR1', kthslr1), # sloped straight line
                  # Two phase regression types - 
                     ('KTHTPR0', kthtpr0), # amplitude only, 0 sloped segments (step change)
@@ -382,6 +379,8 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None):
                     ('KTHTPR3', kthtpr3), # amplitude shift with flat-to-slope segments
                     ('KTHTPR4', kthtpr4), # amplitude shift with slope-to-flat segments  
                  ]
+    if kthslr0_on:
+        models.insert(0, ('KTHSLR0', kthslr0))
     model_order, _ = zip(*models)
         
     # Sanity check that we have a good batch of data
@@ -392,7 +391,7 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None):
     ## that table.
     left_header = " QTYP     QVAL    QRSE     QPF     MU1     MU2  ALPHA1"
     right_header = "  ALPHA2   MSTAT   MCRIT    MOFF KNT1 KNT2"
-    #print (left_header+right_header)
+    print (left_header+right_header)
     
     # The following container class will help us record computed values (like
     # errors for different models, etc) for re-use in the following tests.
@@ -412,7 +411,7 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None):
     for (model_name, model_test) in models:
         result = model_test(x, y, breakpoint, missing_val, vals)
         changepoint_dict[model_name] = result
-       
+    
     ############################################################################ 
     ## Identify the best-fitting model computed above by finding which one has
     ## the lowest BIC value
@@ -424,7 +423,7 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None):
     
     ############################################################################ 
     ## Debug printing for comparison to Fortran PHA        
-    iqtype = model_order.index(cmodel) + 2
+    iqtype = model_order.index(cmodel) + 1 + kthslr0_on
     sse_bic=output['sse_bic']
     mu=output['mu']
     slp=output['alpha']
@@ -433,33 +432,90 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None):
     offset=output['amp_est']
     seg_lens=output['seg_lens']
     
-    #print ("Post: - %2d %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %5d %5d" %
-    #       (iqtype, bic, sse_bic, mu[0], mu[1], slp[0], slp[1], test_stat, crit_val, offset,
-    #        seg_lens[0], seg_lens[1]) )
-    ############################################################################ 
-    
     ## Return the details of the best-fitting model
     # The slopes from each left/right segment
     kthl_left = vals.left_kth_regress
     kthl_right = vals.right_kth_regress
     slopes = [kthl_left.slope, kthl_right.slope] 
+    
+    #print ("Post: - %2d %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %9.2f %5d %5d" %
+    #       (iqtype, bic, sse_bic, mu[0], mu[1], slp[0], slp[1], test_stat, crit_val, offset,
+    #        seg_lens[0], seg_lens[1]) )
+    ############################################################################ 
+    
+    ## Statistical check - is the statistic for the model we found greater 
+    ## than the critical value? If not, then we need to go back and choose
+    ## an SLR model with the minimum BIC
+    if test_stat < crit_val:
+        print "Fail critvar: %2.2f %2.2f %4d %4d" % (test_stat, crit_val, seg_lens[0], seg_lens[1])
+        slr_bics = [(model, changepoint_dict[model]['bic']) for (model,_) in models if 'SLR' in model]
+        slr_bics = sorted(slr_bics, key=operator.itemgetter(1))
+        
+        cmodel, bic = slr_bics[0]
+        slr_output = changepoint_dict[cmodel]
+        
+        iqtype = model_order.index(cmodel) + 1 + kthslr0_on
+        sse_bic=slr_output['sse_bic']
+        mu=slr_output['mu']
+        slopes=slr_output['alpha']
+        test_stat=slr_output['test_stat']
+        crit_val=slr_output['crit_val']
+        offset=slr_output['amp_est']
+        seg_lens=slr_output['seg_lens']
+    
+
+    #### I think this is wrong - 8/1/2010.
+    #### We should be using the offsets for each model rather than resetting
+    #### them.
     # The amplitude change. We need to use the simple one from 'KTHTPR0' if a
     # more complex two-phase regression was the best fit - we want the step 
     # change in the median values of the data on each side. This is a more 
     # robust estimate of the center of the data than the mean is and let's us
     # see how big the jump is before and after the breakpoint.
-    if 'TPR' in cmodel:
-        offset = kthl_left.y_med - kthl_right.y_med
-    else:
-        offset = output['amp_est']
+    #if 'TPR' in cmodel:
+    #    offset = kthl_left.y_med - kthl_right.y_med
+    #else:
+    #    offset = output['amp_est']
     # Z-score for offset, normalized about the sum square error of the residuals
     # of the model fit.
+    ####
     offset_z = offset/sse_bic
     
     ## Store information about this breakpoint and its crucial stats
     return dict(cmodel=cmodel, iqtype=iqtype, offset=offset, offset_z=offset_z, 
-                slopes=slopes)
+                slopes=slopes, bic=bic, test_stat=test_stat, crit_val=crit_val)
 
+def kthslr0(x, y, breakpoint, missing_val, vals):
+    cmodel = "KTHSLR0"
+    kth_regression = kth_line(x, y, missing_val)
+    
+    num_obs =  len(x) # total number of observations
+    n_vals = kth_regression.nval # number of non-missing observations
+    slope = kth_regression.slope
+    y_med = kth_regression.y_med
+    sse_resid = kth_regression.sseflat
+    amp_est = 0.0 # Test assumes no step change
+    
+    # Bayes Info Criterion - total, due to error in variance, and penalty
+    bic, bic_error, bic_dof_penalty = bayes(n_vals, sse_resid, 1)
+    # output string
+    head = "%7s %6.2f %7.2f %7.2f" % (cmodel, bic, bic_error, bic_dof_penalty)
+    stats =  " %7.2f ------- ------- ------- ------- -------" % (y_med, )
+    tail = " %7.2f %5d ----" % (amp_est, n_vals)
+    print (head+stats+tail)
+    
+    ## Record the results of this test
+    result = dict(cmodel=cmodel,
+                  bic=bic, 
+                  mu=[y_med, y_med],
+                  alpha=[slope, slope], 
+                  sse_bic=(sse_resid/n_vals),
+                  seg_lens=[n_vals, 0],
+                  test_stat=0.0,
+                  crit_val=0.0,
+                  amp_est=amp_est)
+    
+    return result
 def kthslr1(x, y, breakpoint, missing_val, vals):
     """KTHSLR1, Sloped straight line test
     
@@ -536,7 +592,7 @@ def kthslr1(x, y, breakpoint, missing_val, vals):
     head = "%7s %6.2f %7.2f %7.2f" % (cmodel, bic, bic_error, bic_dof_penalty)
     stats =  " %7.2f ------- %7.3f ------- ------- -------" % (y_int, slope)
     tail = " %7.2f %5d ----" % (amp_est, n_vals)
-    #print (head+stats+tail)
+    print (head+stats+tail)
     
     ## Record the results of this test
     result = dict(cmodel=cmodel,
@@ -555,7 +611,7 @@ def kthslr1(x, y, breakpoint, missing_val, vals):
     vals.n_vals = n_vals
     vals.all_kth_regress = kth_regression
     
-    return result, vals
+    return result
 
 def kthtpr0(x, y, breakpoint, missing_val, vals):
     """KTHTPR0, Amplitude change, no slope change
@@ -651,7 +707,7 @@ def kthtpr0(x, y, breakpoint, missing_val, vals):
     stats =  " %7.2f %7.2f ------- ------- %7.2f %7.2f" % (left_y_med, right_y_med,
                                                           t_val, t_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, n_left, n_right)
-    #print (head+stats+tail)
+    print (head+stats+tail)
     
     ## Record the results of this test
     result = dict(cmodel=cmodel,
@@ -782,7 +838,7 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     #    PHA. It's different from what is used in kth_line() (which is
     #    the correct way to find the median in a list of data - average the
     #    middle two values if the list length is even).
-    slope_est = median(slopes)
+    slope_est = np.median(slopes)
         
     #print "slope, ic, imed: %7.2f %5d %5d" % (slope_est, nslp, imed)
     
@@ -821,36 +877,26 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     #                                                                   right_y_int)
     
     # Seventh, we compute root mean square error of the residuals
-    residuals = [missing_val]*n_all # residuals of the fit
-    fit = [missing_val]*n_all       # fitted regression line
     valid_count = 0          # total number of non-missing values used
     r_sum_sqr_x = 0.0        # sum square error between each value and the median
                              # of all the data
     r_sum_sqr_e = 0.0        # sum square error of residuals for each segment
                              # regression
-                             # r_slope - slope of linear regression line
-                             # r_t - slope error
     for i in range(n_all):
-        if all_valid_data[i] != missing_val:
+        if y[i] != missing_val:
             valid_count = valid_count + 1
             if valid_count < n_left:
                 y_int = left_y_int
             else:
                 y_int = right_y_int
-            residuals[i] = (y_int + slope_est*(i+1)) - all_valid_data[i]
-            fit[i] = y_int + slope_est*(i+1)
-            r_sum_sqr_e += r_sum_sqr_e + residuals[i]**2
+            residual = (y_int + slope_est*(i+1)) - y[i]
+            r_sum_sqr_e += r_sum_sqr_e + residual**2
             r_sum_sqr_x += r_sum_sqr_x + (float(i+1) - data_med)**2
-    
-    r_se_sqr = r_sum_sqr_e / (valid_count - 2)
-    r_sb = sqrt(r_se_sqr / r_sum_sqr_x)
-    r_t = slope_est / r_sb # unused?
-    
+        
     # Finally, we have fit same-sloped models to the left and right
     # segments. We can carry on the model test.
     r_mu = (left_y_int, right_y_int)
     r_alpha = slope_est
-    sse_seg_resid = r_sum_sqr_e
     
     # 3) Now it looks like we compute residuals for all our data using
     # the models attained above. I'm not sure why the PHA does this - it seems
@@ -860,12 +906,12 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     rsse = [0.0, 0.0] # sum square error between each value and the mean for all
                       # the data.
     for k in range(num_obs):
-        if all_valid_data[k] != missing_val:
+        if y[k] != missing_val:
             if k <= breakpoint:
                 ind = 0
             else:
                 ind = 1
-            residual = all_valid_data[k] - r_mu[ind] - r_alpha*(k+1)
+            residual = y[k] - r_mu[ind] - r_alpha*(k+1)
             rsse[ind] = rsse[ind] + residual**2
             rssx += (float(k+1) - all_mean)**2
     
@@ -905,7 +951,7 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     stats =  " %7.2f %7.2f %7.3f ------- %7.2f %7.2f" % (r_mu[0], r_mu[1],
                                                          r_alpha, f_val, f_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, n_left, n_right)
-    #print (head+stats+tail)
+    print (head+stats+tail)
     
     ## Record results of this test
     result = dict(cmodel=cmodel,
@@ -1010,7 +1056,7 @@ def kthtpr2(x, y, breakpoint, missing_val, vals):
                                                        kthl_left.slope, kthl_right.slope,
                                                        f2_val, f2_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, vals.n_left, vals.n_right)
-    #print (head+stats+tail)       
+    print (head+stats+tail)       
     
     ## Record result of this test
     result = dict(cmodel=cmodel,
@@ -1107,7 +1153,7 @@ def kthtpr3(x, y, breakpoint, missing_val, vals):
     stats =  " %7.2f %7.2f ------- %7.3f %7.2f %7.2f" % (kthl_left.y_med, kthl_right.y_int,
                                                         kthl_right.slope, f_val, f_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, vals.n_left, vals.n_right)
-    #print (head+stats+tail)
+    print (head+stats+tail)
     
     ## Records results from this analysis
     result = dict(cmodel=cmodel,
@@ -1154,25 +1200,25 @@ def kthtpr4(x, y, breakpoint, missing_val, vals):
     :Returns:
         result, a dictionary with the following fields:
             :Param cmodel:
-                The name of the test ('KTHTPR4')
+                The name of the test ('KTHTPR4').
             :Param bic: 
-                The Bayes Information Criterion statistic for this analysis
+                The Bayes Information Criterion statistic for this analysis.
             :Param mu: 
-                A 2-value tuple with the y-intercepts of the regression here
+                A 2-value tuple with the y-intercepts of the regression here.
             :Param alpha: 
                 A 2-value tuple with the computed slopes of the regressions 
-                here
+                here.
             :Param sse_bic: 
-                The sum square error on the computed BIC value
+                The sum square error on the computed BIC value.
             :Param seg_lens: 
                 A 2-value tuple with the length of the segments in the 
-                regressions here
+                regressions here.
             :Param test_stat: 
-                The test statistic value computed here
+                The test statistic value computed here.
             :Param crit_val: 
                 The critical value for the test statistic at alpha=0.05.
             :Param amp_est: 
-                An estimate of the changepoint amplitude
+                An estimate of the changepoint amplitude.
         vals, the original 'Values' object provided to this method with no
             modifications.
                 
@@ -1203,7 +1249,7 @@ def kthtpr4(x, y, breakpoint, missing_val, vals):
     stats =  " %7.2f %7.2f %7.3f ------- %7.2f %7.2f" % (kthl_left.y_int, kthl_right.y_med,
                                                          kthl_left.slope, f_val, f_crit)
     tail = "% 7.2f %5d %4d" % (amp_est, vals.n_left, vals.n_right)
-    #print (head+stats+tail)
+    print (head+stats+tail)
     
     ## Record result of this analysis
     result = dict(cmodel=cmodel,

@@ -315,9 +315,9 @@ from util import imo2iym
 #con2str = lambda val, miss=-9999: "---" if val != miss else "-x-"
 def con2str(data, missing_val=-9999):
     val, hits = data
-    if val == missing_val:
-        return "-x-"
-    elif hits > 0:
+    #if val == missing_val:
+    #    return "-x-"
+    if hits > 0:
         return "%3d" % hits
     else:
         return "---"

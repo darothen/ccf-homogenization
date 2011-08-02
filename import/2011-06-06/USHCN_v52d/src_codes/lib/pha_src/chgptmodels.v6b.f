@@ -121,7 +121,7 @@ c       2) The estimated intercept is within the series limits
       
       ifail = 0
       
-      ibdebug = 0
+      ibdebug = 4
 c      if(iopt .ge. 4) ibdebug = 2
       if(ibdebug .ge. 1) 
      *  print *,' CHGPTMODEL ingtype:',inqtype,' iopt:',iopt 
@@ -1410,7 +1410,7 @@ c     Calculate the likelihood ratio test statistic ts
             endif  
           enddo
           if(n1 .ne. 0) then     
-            if (i .ge. mcnt-1) print *,zmn1
+c            if (i .ge. mcnt-1) print *,zmn1
             zmn1 = zmn1/n1
           else
             goto 10
@@ -1422,13 +1422,13 @@ c     Calculate the likelihood ratio test statistic ts
             endif  
           enddo
           if(n2 .ne. 0) then   
-            if (i .ge. mcnt-1) print *,zmn2
+c            if (i .ge. mcnt-1) print *,zmn2
             zmn2 = zmn2/n2
           else
             goto 10
           endif
           
-          if (i .ge. mcnt-1) print *,n1,zmn1,n2,zmn2
+c          if (i .ge. mcnt-1) print *,n1,zmn1,n2,zmn2
           ts(i) = n1*zmn1*zmn1 + n2*zmn2*zmn2
           iCount=iCount+1
         endif    

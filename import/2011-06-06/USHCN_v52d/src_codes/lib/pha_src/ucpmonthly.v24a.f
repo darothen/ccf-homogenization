@@ -1336,7 +1336,7 @@ c     begyr - begin year
 c     endyr - end year
 c     nstns - number of stations (including candidate)
         
-      iedebug = 0
+      iedebug = 10
  
 c     set writing for interim series for each test (YES=1;NO=0)
       iwrt = 0

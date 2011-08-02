@@ -21,6 +21,15 @@ import operator
 # ccf-homogenization imports
 from parameters import RADIUS_EARTH
 
+def sign(a):
+    """Returns 1 if a > 0, -1 if a < 0, and 0 if a == 0."""
+    if a > 0:
+        return 1
+    elif a == 0: 
+        return 0
+    else:        
+        return -1
+
 def wirthselect(data, k):
     """An efficient method for computing the median of a list of data, based on
     Hoare's quick select and the work of Niklaus Wirth. This is a pure Python

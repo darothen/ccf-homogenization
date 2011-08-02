@@ -109,7 +109,7 @@ def neighborhood_strings(station, neighborhood, stations_list):
 
 def find_correlations(cand_series, series_dict, neighborhood, 
                       corrlim=0.1, begyr=1900, endyr=2010, minpair=14, 
-                      numcorr=20):
+                      numcorr=20, **kwargs):
     
     corr_dict = dict()
     

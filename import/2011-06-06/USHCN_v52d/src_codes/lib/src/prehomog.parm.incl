@@ -21,7 +21,9 @@ c       NOTE: This variable must be coordinated with its counterpart in
 c               the inhomog.parm.incl file
         integer nstns
 c       FOR USHCN RUN
-        parameter (nstns = 40)
+c        parameter (nstns = 52)
+c	FOR DANIEL TEST
+	parameter (nstns = 20)
 c       FOR GHCN RUN !!!!!
 c        parameter (nstns = 100)
 

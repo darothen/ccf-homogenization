@@ -99,9 +99,9 @@ def get_ushcn_data(params):
         raise ArgumentError("variable", params.variable, proper=ELEM_CODES)    
     
     ## SYNTHETIC BENCHMARK BRANCH CONSTANTS INJECTION
-    if params.benchmark:
-        USHCN_RAW_DATA_PATTERN = "BENCHMARK_%s.%s" 
-        USHCN_STATION_LIST = "benchmark-stations.txt"
+    #if hasattr(params, "benchmark"):
+    #    USHCN_RAW_DATA_PATTERN = "BENCHMARK_%s.%s" 
+    #    USHCN_STATION_LIST = "benchmark-stations.txt"
     
     data_fn = (USHCN_RAW_DATA_PATTERN % (params.data_src, params.variable)) + ".gz"
     station_list_fn = USHCN_STATION_LIST
