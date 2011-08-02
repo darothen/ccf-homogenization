@@ -262,7 +262,7 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
     #         ('307633', '314684'),
     #         ('124837', '324418'),
     #         ('164407', '314055')]
-    #pairs = [('116738', '231037'), ]
+    #pairs = [('030936', '034572'), ]
     
     for (id1, id2) in pairs:
         print "Pair %s with %s" % (id1, id2)
@@ -834,10 +834,14 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
                 print first_bp_index+1, last_bp_index+1
                 print left, bp, right
                 for i in range(first_bp_index+1, last_bp_index+1):
-                    print i
+                    print i, imo2iym(i), i+left, imo2iym(i+left)
                     seg_x[i] = MISS
                     seg_data[i] = MISS
-                    ndelete.append(i)
+                    # Recall that seg_data[0] == diff_data[left]. ndelete records
+                    # the *true month where there is unviable data*, so it needs to
+                    # point back to the original element in diff_data we are 
+                    # worried about.
+                    ndelete.append(i+left) 
                 bp_analysis = minbic(seg_x, seg_data, first_bp_index, MISS, kthslr0_on=True)
                 
                 # Remove the first interim bp and update valid_bps with this new
@@ -860,9 +864,9 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         #print "ELAPSED TIMES = %3.2e %3.2e" % (elapsed1, elapsed2)
     print "done"
     ##
-    import pickle
-    f = open("pair_results", 'w')
-    pickle.dump(pair_results, f)
+    #import pickle
+    #f = open("pair_results", 'w')
+    #pickle.dump(pair_results, f)
     return pair_results
             
             

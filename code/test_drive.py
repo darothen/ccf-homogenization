@@ -245,7 +245,7 @@ hom_params = dict(nstns=params.nstns,
                     stepthres=0.0, # a temperature step limit at which these models might work
                 )
 hom_params = parameters.Parameters(**hom_params)
-read = False
+read = True
 if os.path.exists("pair_results") and read:
     print "Found pair_results on disk"
     pair_results = pickle.load(open("pair_results", "r"))
@@ -261,7 +261,7 @@ for pair_str in pair_results.keys():
             continue
         
         delete_bps = []
-        if pair_results[pair_str][bp]['iqtype'] < 2:
+        if pair_results[pair_str][bp]['iqtype'] <= 2:
             delete_bps.append(bp)
         for bp in delete_bps:
             del pair_results[pair_str][bp]
@@ -284,16 +284,16 @@ for pair in pair_results:
     result = pair_results[pair]
     for (bp, result) in result.iteritems():
         if bp == 'del':
-            print pair_str, pair_results[pair_str]['del']
-            for bp in pair_results[pair_str]['del']:
+            print pair_str, pair_results[pair]['del']
+            for bp in pair_results[pair]['del']:
                 hits[id1_ind, bp] += 1
                 hits[id2_ind, bp] += 1
-        elif result['iqtype'] != 2:
-            hits[id1_ind, bp] += 1
-            hits[id2_ind, bp] += 1
+        #elif result['iqtype'] > 3:
+        #    hits[id1_ind, bp] += 1
+        #    hits[id2_ind, bp] += 1
             
-            hits_neighbors[id1_ind][bp].append(id2)
-            hits_neighbors[id2_ind][bp].append(id1)
+        #    hits_neighbors[id1_ind][bp].append(id2)
+        #    hits_neighbors[id2_ind][bp].append(id1)
 ################################################################################
 ## PRE FILTER 1
 
@@ -350,9 +350,9 @@ print head2
 #con2str = lambda val, miss=-9999: "---" if val != miss else "-x-"
 def con2str(data, missing_val=-9999):
     val, hits = data
-    #if val == missing_val:
-    #    return "-x-"
-    if hits > 0:
+    if val == missing_val:
+        return "-X-"
+    elif hits > 0:
         return "%3d" % hits
     else:
         return "---"
@@ -360,7 +360,7 @@ def con2str(data, missing_val=-9999):
 for imo in xrange(hom_params.nmo):
 #for imo in xrange(10):
     year, month = imo2iym(imo)
-    base_str = "%4d %2d %4d |" % (year, month, imo+11)
+    base_str = "%4d %2d %4d |" % (year, month, imo-11)
     month_strs = "|".join(map(con2str, zip(all_data[:,imo],
                                            hits[:,imo])))+"|"
     print_month_strs = False
