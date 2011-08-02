@@ -840,21 +840,23 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     #    middle two values if the list length is even).
     slope_est = np.median(slopes)
         
-    #print "slope, ic, imed: %7.2f %5d %5d" % (slope_est, nslp, imed)
+    print "slope, ic, %7.2f %5d " % (slope_est, nslp)
     
     # Fifth, compute the first segment intercept, y-median - slope*x-median
     # BUG: Another instance where we do not handle the case of an even number of
     #    values when computing the median
-    imed = (n_left - 1)/2
-    if (n_left%2)==1: imed = imed+1
-    range_med = range_left[imed]
+    #imed = (n_left - 1)/2
+    imed = n_left/2
+    if (n_left%2)==1: imed += 1
+    
+    range_med = range_left[imed-1]
     valid_left = sorted(valid_left)
     data_med = valid_left[imed]
     left_y_int = data_med-slope_est*range_med
-    #print "Seg1 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
-    #                                                                   data_med,
-    #                                                                   slope_est,
-    #                                                                   left_y_int)
+    print "Seg1 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
+                                                                       data_med,
+                                                                       slope_est,
+                                                                       left_y_int)
     # BUG: Again in chgptmodel.kendalltheill(), there is a bug on line 2339. Starting
     #     here, we over-write the medians we found in both lists, and use the second
     #     segment for all our computations! I reproduce that behavior here by using the
@@ -864,17 +866,18 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     # Sixth, compute the second segment intercept
     # BUG: Another instance where we do not handle the case of an even number of
     #    values when computing the median
-    imed = (n_right - 2)/2
-    if (n_right%2)==1: imed = imed + 1
+    #imed = (n_right - 2)/2
+    imed = n_right/2
+    if (n_right%2)==1: imed += 1
     
-    range_med = range_right[imed]
+    range_med = range_right[imed-1]
     valid_right = sorted(valid_right)
     data_med = valid_right[imed]
     right_y_int = data_med-slope_est*range_med
-    #print "Seg2 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
-    #                                                                   data_med,
-    #                                                                   slope_est,
-    #                                                                   right_y_int)
+    print "Seg2 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
+                                                                       data_med,
+                                                                       slope_est,
+                                                                       right_y_int)
     
     # Seventh, we compute root mean square error of the residuals
     valid_count = 0          # total number of non-missing values used

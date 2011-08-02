@@ -245,7 +245,7 @@ hom_params = dict(nstns=params.nstns,
                     stepthres=0.0, # a temperature step limit at which these models might work
                 )
 hom_params = parameters.Parameters(**hom_params)
-read = True
+read = False
 if os.path.exists("pair_results") and read:
     print "Found pair_results on disk"
     pair_results = pickle.load(open("pair_results", "r"))

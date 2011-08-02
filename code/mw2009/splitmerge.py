@@ -262,7 +262,7 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
     #         ('307633', '314684'),
     #         ('124837', '324418'),
     #         ('164407', '314055')]
-    #pairs = [('030936', '034572'), ]
+    #pairs = [('120177', '220488'), ]
     
     for (id1, id2) in pairs:
         print "Pair %s with %s" % (id1, id2)
@@ -864,9 +864,9 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
         #print "ELAPSED TIMES = %3.2e %3.2e" % (elapsed1, elapsed2)
     print "done"
     ##
-    #import pickle
-    #f = open("pair_results", 'w')
-    #pickle.dump(pair_results, f)
+    import pickle
+    f = open("pair_results", 'w')
+    pickle.dump(pair_results, f)
     return pair_results
             
             

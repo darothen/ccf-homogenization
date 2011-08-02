@@ -2189,7 +2189,7 @@ c ===================================================================
       ibeg2 = 0
       rT = -9999.0
       rSumSqrE = 0.0
-      ktdebug = 0
+      ktdebug = 10
       hsinc = sinc * 0.5
       
 c     remove missing data from incoming arrays
