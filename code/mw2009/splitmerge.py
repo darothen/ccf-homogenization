@@ -256,13 +256,13 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
 #                pairs.append(ordered_pair)
 #                added_pairs += 1
     import pickle
-    pairs = list(pickle.load(open("fortran_pairs", "r")))
+    #pairs = list(pickle.load(open("fortran_pairs", "r")))
     #pairs = [('314684', '315177'),
     #         ('086997', '314684'), 
     #         ('307633', '314684'),
     #         ('124837', '324418'),
     #         ('164407', '314055')]
-    #pairs = [('120177', '220488'), ]
+    pairs = [('111280', '124837'), ]
     
     for (id1, id2) in pairs:
         print "Pair %s with %s" % (id1, id2)
@@ -865,7 +865,7 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
     print "done"
     ##
     import pickle
-    f = open("pair_results", 'w')
+    f = open("pair_results_test", 'w')
     pickle.dump(pair_results, f)
     return pair_results
             

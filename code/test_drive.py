@@ -245,7 +245,7 @@ hom_params = dict(nstns=params.nstns,
                     stepthres=0.0, # a temperature step limit at which these models might work
                 )
 hom_params = parameters.Parameters(**hom_params)
-read = False
+read = True
 if os.path.exists("pair_results") and read:
     print "Found pair_results on disk"
     pair_results = pickle.load(open("pair_results", "r"))
@@ -261,7 +261,7 @@ for pair_str in pair_results.keys():
             continue
         
         delete_bps = []
-        if pair_results[pair_str][bp]['iqtype'] <= 2:
+        if 'SLR' in pair_results[pair_str][bp]['cmodel']:
             delete_bps.append(bp)
         for bp in delete_bps:
             del pair_results[pair_str][bp]
@@ -284,16 +284,19 @@ for pair in pair_results:
     result = pair_results[pair]
     for (bp, result) in result.iteritems():
         if bp == 'del':
-            print pair_str, pair_results[pair]['del']
-            for bp in pair_results[pair]['del']:
-                hits[id1_ind, bp] += 1
-                hits[id2_ind, bp] += 1
-        #elif result['iqtype'] > 3:
-        #    hits[id1_ind, bp] += 1
-        #    hits[id2_ind, bp] += 1
+            continue
+            print pair, pair_results[pair]['del']
+            for bad_month in pair_results[pair]['del']:
+                hits[id1_ind, bad_month] += 1
+                hits[id2_ind, bad_month] += 1
             
-        #    hits_neighbors[id1_ind][bp].append(id2)
-        #    hits_neighbors[id2_ind][bp].append(id1)
+        else:
+            #if 'TPR' in result['cmodel']:
+            hits[id1_ind, bp] += 1
+            hits[id2_ind, bp] += 1
+       
+            hits_neighbors[id1_ind][bp].append(id2)
+            hits_neighbors[id2_ind][bp].append(id1)
 ################################################################################
 ## PRE FILTER 1
 
@@ -301,43 +304,49 @@ for pair in pair_results:
 ## FILTER 1 TEST
 new_hits = np.zeros_like(hits)
 
-#for imo in range(hits.shape[1]):
-#    hits_month = hits[:,imo]
-#    while hits_month.max() > 1:
-#        max_in_hits = hits_month.max()
-#        station_index = hits_month.argmax()
-#    
-#        station_id = station_list[station_index]
-#        iy, im = imo2iym(imo)
-#        
-#        ## Find entries in pair_results with this station and a changepoint on this
-#        ## date
-#        pr_keys = [key for key in pair_results if (station_id in key and
-#                                                   imo in pair_results[key])]
-#        if not pr_keys: continue
-#        offset_sum, offset_z_sum, count = 0.0, 0.0, 0.0
-#        for key in pr_keys:
-#            bp_summary = pair_results[key][imo]
-#            if 'SLR' in bp_summary['cmodel']:
-#                continue
-#            id1, id2 = key.split("-")
-#            
-#            offset, offset_z = bp_summary['offset'], bp_summary['offset_z']
-#            if station_id == id2: 
-#                offset = offset*-1.0
-#                
-#            offset_sum += offset
-#            offset_z_sum += abs(offset_z)
-#            count += 1
-#        avg_offset = offset_sum/count
-#        avg_offset_z = offset_z_sum/count
-#        
-#        print ("  -- %s-CONFRM MW1 at %5d %4d %2d AVG ADJ: %3.2f %2.2f %3d" % 
-#               (station_id, imo, iy, im, avg_offset, avg_offset_z, max_in_hits))
-#        
-#        new_hits[station_index,imo] = max_in_hits
-#        #hits[station_index,imo] = 1
-#        hits_month[station_index] = 1
+for imo in range(hits.shape[1]):
+    hits_month = hits[:,imo]
+    while hits_month.max() > 1:
+        
+        max_in_hits = hits_month.max()
+        station_index = hits_month.argmax()
+    
+        station_id = station_list[station_index]
+        iy, im = imo2iym(imo)
+        
+        #print max_in_hits, station_index, station_id
+        
+        ## Find entries in pair_results with this station and a changepoint on this
+        ## date
+        pr_keys = [key for key in pair_results if (station_id in key and
+                                                   imo in pair_results[key])]
+        #print pr_keys
+        
+        if not pr_keys: 
+            break
+        offset_sum, offset_z_sum, count = 0.0, 0.0, 0.0
+        for key in pr_keys:
+            bp_summary = pair_results[key][imo]
+
+            id1, id2 = key.split("-")
+            
+            offset, offset_z = bp_summary['offset'], bp_summary['offset_z']
+            if station_id == id2: 
+                offset = offset*-1.0
+                
+            offset_sum += offset
+            offset_z_sum += abs(offset_z)
+            count += 1
+        avg_offset = offset_sum/count
+        avg_offset_z = offset_z_sum/count
+        
+        print ("  -- %s-CONFRM MW1 at %5d %4d %2d AVG ADJ: %3.2f %2.2f %3d" % 
+               (station_id, imo, iy, im, avg_offset, avg_offset_z, max_in_hits))
+        
+        new_hits[station_index,imo] = max_in_hits
+        hits[station_index,imo] = 1
+        hits_month[station_index] = 1
+        
 if np.any(hits < 0): raise ValueError("hits < 0")
 
 ## Print header - 
@@ -350,10 +359,11 @@ print head2
 #con2str = lambda val, miss=-9999: "---" if val != miss else "-x-"
 def con2str(data, missing_val=-9999):
     val, hits = data
-    if val == missing_val:
-        return "-X-"
-    elif hits > 0:
+    
+    if hits > 0:
         return "%3d" % hits
+    #elif val == missing_val:
+    #    return "-X-"
     else:
         return "---"
      
