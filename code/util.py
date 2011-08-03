@@ -329,6 +329,49 @@ def scale_series(yearly_data, scale=.1, missing_val=-9999):
                 yearly_data[iy][im] = data_val*scale
     return yearly_data
 
+def compute_monthly_avg_std(yearly_data, missing_val=-9999):
+    """Computes the average of the std deviation of values for each month
+    in the data set.
+        
+    :Param yearly_data:
+        The yearly data to compute anomalies for, with dimensions (nyears x 12)
+    :param missing_val:
+        The placeholder for missing data which shouldn't be accumulated.
+    :Return:
+        
+    
+    """
+    nmonths = 12
+    sums = []
+    sum_squares = []
+    counts = []
+    
+    for imonth in xrange(nmonths):
+        
+        # Get **all** the data for this month, *except* for the first year
+        all_months_data = map(operator.itemgetter(imonth), yearly_data)
+        valid_all_months_data = get_valid_data(all_months_data, missing_val)
+        
+        sum_data = sum(valid_all_months_data)
+        sum_squares_data = sum( (data**2 for data in valid_all_months_data) )
+        
+        sums.append(sum_data)
+        sum_squares.append(sum_squares_data)
+        counts.append(len(valid_all_months_data))
+        
+    sum_monthly_stds = 0.0
+    monthly_std_count = 0.0
+    for (msum, msum_square, mcount) in zip(sums, sum_squares, counts):
+        if mcount > 1.0:
+            sum_monthly_stds +=  sqrt( (msum_square - (msum*msum/mcount)) / 
+                                       (mcount - 1.0) )
+            monthly_std_count += 1.0
+            
+    if monthly_std_count > 0:
+        return sum_monthly_stds/monthly_std_count
+    else:
+        return missing_val
+
 def compute_monthly_anomalies(yearly_data, missing_val=-9999):
     """Computes monthly average anomalies given a series of data.
     

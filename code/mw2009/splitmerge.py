@@ -230,7 +230,7 @@ def snht(data, missing_val=-9999, valid_count=None, standardized=False):
     
     return ts
 
-def splitmerge(network, beg_year=1, end_year=2, **kwargs):
+def splitmerge(network, pairs, beg_year=1, end_year=2, **kwargs):
     
     ## EXPERIMENTAL PLACEHOLDERS - will eventually be replaced with a master
     ## loop to do all the id pairs.
@@ -255,14 +255,6 @@ def splitmerge(network, beg_year=1, end_year=2, **kwargs):
 #            if not ordered_pair in pairs:
 #                pairs.append(ordered_pair)
 #                added_pairs += 1
-    import pickle
-    #pairs = list(pickle.load(open("fortran_pairs", "r")))
-    #pairs = [('314684', '315177'),
-    #         ('086997', '314684'), 
-    #         ('307633', '314684'),
-    #         ('124837', '324418'),
-    #         ('164407', '314055')]
-    pairs = [('111280', '124837'), ]
     
     for (id1, id2) in pairs:
         print "Pair %s with %s" % (id1, id2)
