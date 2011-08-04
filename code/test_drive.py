@@ -35,6 +35,8 @@ from mw2009.splitmerge import splitmerge
 
 from mw2009.chgptmodels import bayes, kth_line, t_test, lookup_critical
 
+from mw2009.estamt import estamt
+
 import parameters
 
 # A sample network of 52 stations. Started with a selection of literally
@@ -229,6 +231,7 @@ hom_params = dict(nstns=params.nstns,
                     minann=5, # min number of years for a given month
                     slpmthmax=0.0225, # max slope (degrees/month) threshold for sloped models
                     minlen=18, # min number of (months) for an estimate window
+                    minlenshf=24,
                     mincomp=60, #
                     compt=0.8, # if segment has more than minlen but less than mincomp,
                                # then compt is % completeness needed for estimate
@@ -254,6 +257,7 @@ pairs = list(pickle.load(open("fortran_pairs", "r")))
 #         ('124837', '324418'),
 #         ('164407', '314055')]
 #pairs = [('111280', '124837'), ]
+hom_params['pairs'] = pairs
 
 read = True
 if os.path.exists("pair_results") and read:
@@ -284,15 +288,14 @@ ids = station_list
 all_data = [n.raw_series[id].monthly_series for id in ids]
 all_data = np.array(all_data)
 
+################################################################################
+## PRE FILTER 1
 ## Attribute changepoint hits to pair arrays
 hits = np.zeros_like(all_data)
 
 hits_neighbors = [[list() for i in xrange(hom_params.nmo)] for i in xrange(len(ids))]
 ntests = np.zeros_like(all_data)
-#for pair in pairs:
-#    id1, id2 = pair
-#    ntests[ids.index(id1), :] += 1
-#    ntests[ids.index(id2), :] += 1
+hits_models = np.zeros(all_data.shape, dtype=np.dtype( (str, 7) ))
 
 for pair in pair_results:
     id1, id2 = pair.split("-")
@@ -305,6 +308,10 @@ for pair in pair_results:
     for (bp, result) in result.iteritems():
         if bp == 'del':
             #continue
+            ## Store in network
+            n.raw_series[id1].delete_months(pair_results[pair]['del'])
+            n.raw_series[id2].delete_months(pair_results[pair]['del'])            
+            
             print pair, pair_results[pair]['del']
             for bad_month in pair_results[pair]['del']:
                 hits[id1_ind, bad_month] += 1
@@ -318,11 +325,13 @@ for pair in pair_results:
             hits_neighbors[id1_ind][bp].append(id2)
             hits_neighbors[id2_ind][bp].append(id1)
             
-################################################################################
-## PRE FILTER 1
-
+            hits_models[id1_ind, bp] = result['cmodel']
+            hits_models[id2_ind, bp] = result['cmodel']
+            
 ################################################################################
 ## FILTER 1 TEST
+## Try to attribute multiple hits between stations at each month to a common
+## station
 new_hits = np.zeros_like(hits)
 amps = np.zeros_like(hits)
 
@@ -391,6 +400,8 @@ if np.any(hits < 0): raise ValueError("hits < 0")
 ################################################################################
 ## FILTER 2 TEST
 ## won't actually do anything but print things to console for now
+## Use station history and metadata to absorb undocumented changepoints
+## to known ones where possible
 print ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
 print "FILTER 2 - SHF"
 print "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
@@ -429,7 +440,9 @@ for station_index in range(num_stations):
             print "ASTD: ",station_index,station_id,"1",iy,im,astd,ahigh,stdk,jsum,ibracket
 
 ################################################################################
-## FILTER 3 TEST           
+## FILTER 3 TEST
+## Try to reduce the number of changepoints by condensing closely-related
+## changepoints into one another.
 ##
 ## Go back through the years/months
 ##    For each technique
@@ -585,6 +598,7 @@ for station_index in range(num_stations):
             
     print "----------------------------------------------"
     # examine interim khits array for station's filtered changepoints
+    uchgpt_dict = dict()
     for month in range(hom_params.nmo):
         # ... if highest hits > ithres(npair) then save
         # fetch the numbr of pairs tested
@@ -606,9 +620,22 @@ for station_index in range(num_stations):
                 astd = ahigh
                 print ("%5d %6s-UCHGPT KW%1d at %4d %3d %4d %6.2f %6.2f %3d %3d %3d" % 
                        (station_index, station_id, 1, iy, im, jsum, ahigh, astd, ibracket, npair, ihthres) )
+                
+                uchgpt_dict[month] = { 'jsum': jsum,
+                                       'ahigh': ahigh,
+                                       'astd': astd }
+                
+    n.raw_series[station_id].changepoints = uchgpt_dict
     
 print "-------------------------------------------------"
 print "Undoc filter: ",ifound
+
+print ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+print "FINAL STEP - ENTER ESTAMT"
+print "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+
+estamt(n, **hom_params)
+
 sys.exit()
 
 ## Print header - 
@@ -643,7 +670,9 @@ for imo in xrange(hom_params.nmo):
     
     if print_month_strs:
         print base_str+month_strs
-    
+
+
+
 # Test plot
 #pair_str = pair_results.keys()[-1]
 #id1, id2 = pair_str.split("-")

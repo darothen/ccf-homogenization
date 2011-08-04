@@ -3061,8 +3061,8 @@ c     correlation threshold for lpairs
 c     debug output level
 c      iedebug = 1
 c      icdebug = 2
-      iedebug = 0
-      icdebug = 0
+      iedebug = 6
+      icdebug = 6
 
 c     initialize temporary EDIT array for all station/neigh/months
       do itarg = 1, maxstns

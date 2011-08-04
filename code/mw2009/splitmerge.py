@@ -230,7 +230,7 @@ def snht(data, missing_val=-9999, valid_count=None, standardized=False):
     
     return ts
 
-def splitmerge(network, pairs, beg_year=1, end_year=2, **kwargs):
+def splitmerge(network, pairs=None, beg_year=1, end_year=2, **kwargs):
     
     ## EXPERIMENTAL PLACEHOLDERS - will eventually be replaced with a master
     ## loop to do all the id pairs.
@@ -580,7 +580,6 @@ def splitmerge(network, pairs, beg_year=1, end_year=2, **kwargs):
 ####################################
 ##### MULTIPROCESS
         from multiprocessing import Pool
-        
 
         global counter
         multi_bp_dict = {}
@@ -809,7 +808,7 @@ def splitmerge(network, pairs, beg_year=1, end_year=2, **kwargs):
                 # Reject remaining interim bps
                 for bp in close_bps:
                     sorted_bps.remove(bp)
-                #    del valid_bps[bp]
+                    del valid_bps[bp]
                     
                 yb, mb = imo2iym(first_bp)
                 print ("Null domain - Earliest Interim : %s %4d %2d" %
@@ -844,7 +843,7 @@ def splitmerge(network, pairs, beg_year=1, end_year=2, **kwargs):
                 # Reject remaining interim bps
                 for bp in close_bps:
                     sorted_bps.remove(bp)
-                #    del valid_bps[bp]
+                    del valid_bps[bp]
                 
                 yb, mb = imo2iym(first_bp)
                 print ("Diff domain - Earliest Interim : %s %4d %2d" %
@@ -857,7 +856,7 @@ def splitmerge(network, pairs, beg_year=1, end_year=2, **kwargs):
     print "done"
     ##
     import pickle
-    f = open("pair_results_test", 'w')
+    f = open("pair_results", 'w')
     pickle.dump(pair_results, f)
     return pair_results
             

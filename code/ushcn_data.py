@@ -127,6 +127,7 @@ class Series(object):
         series = None
         years = None
         subset_years = None
+        self._deleted_months = []
         if 'series' in k:
             if not 'years' in k:
                 raise MissingDataError("years")
@@ -163,6 +164,11 @@ class Series(object):
     def series(self):
         """Get the actual data contained in this series."""
         return self._series
+    
+    @property 
+    def deleted_months(self):
+        """Get the months which have been tagged for deleted"""
+        return self._deleted_months
         
     @property 
     def __len__(self):
@@ -198,6 +204,10 @@ class Series(object):
         self._years = list(years)
         self._series = list(series)
         self._monthly = self._flatten_months(series)
+        
+    def delete_months(self, months):
+        """Add the given months to the list of deleted months"""
+        self._deleted_months.extend(months)
         
     @property
     def years(self):
