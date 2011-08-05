@@ -21,6 +21,8 @@ In the future, an additional class will be added to contain collections of
 """
 __docformat__ = "restructuredtext"
 
+from util import compute_monthly_anomalies
+
 #: The element codes identifying what variable is contained in a USHCN dataset,
 #: and the scaling factor to convert the recorded values to observations.
 ELEM_CODES = { 1: { 'type': 'max', 'scale': 0.1 },
@@ -254,6 +256,17 @@ class Series(object):
                 filled_series.append(missing_yearly)
         
         return filled_series, filled_years
+    
+    @property
+    def monthly_anomaly_series(self):
+        """Returns the monthly anomalies computed from this series as a flat
+        list of length (len(self.years)*12)
+        """
+        anomalies = compute_monthly_anomalies(self.series, 
+                                              self.MISSING_VAL)
+        flat_anomalies = self._flatten_months(anomalies)
+        
+        return flat_anomalies        
     
 class Network(object):
     """USHCN Network of stations/associated data.

@@ -445,24 +445,30 @@ def minbic(x, y, breakpoint, missing_val=-9999, models=None, kthslr0_on=False):
     
     ## Statistical check - is the statistic for the model we found greater 
     ## than the critical value? If not, then we need to go back and choose
-    ## an SLR model with the minimum BIC
+    ## an SLR model with the minimum BIC. However, if there weren't any SLR
+    ## models fit to this segment of data, then pass back what we found. Assume
+    ## the uesr understand what they're doing by over-riding the comprehensive
+    ## model-fitting process.
     if test_stat < crit_val:
         print "Fail critvar: %2.2f %2.2f %4d %4d" % (test_stat, crit_val, seg_lens[0], seg_lens[1])
         slr_bics = [(model, changepoint_dict[model]['bic']) for (model,_) in models if 'SLR' in model]
-        slr_bics = sorted(slr_bics, key=operator.itemgetter(1))
         
-        cmodel, bic = slr_bics[0]
-        slr_output = changepoint_dict[cmodel]
+        # if no slr models were fit, then don't change anything! just skip out
+        if slr_bics:
+            slr_bics = sorted(slr_bics, key=operator.itemgetter(1))
+            
+            cmodel, bic = slr_bics[0]
+            slr_output = changepoint_dict[cmodel]
+            
+            iqtype = model_order.index(cmodel) + 1 + kthslr0_on
+            sse_bic=slr_output['sse_bic']
+            mu=slr_output['mu']
+            slopes=slr_output['alpha']
+            test_stat=slr_output['test_stat']
+            crit_val=slr_output['crit_val']
+            offset=slr_output['amp_est']
+            seg_lens=slr_output['seg_lens']
         
-        iqtype = model_order.index(cmodel) + 1 + kthslr0_on
-        sse_bic=slr_output['sse_bic']
-        mu=slr_output['mu']
-        slopes=slr_output['alpha']
-        test_stat=slr_output['test_stat']
-        crit_val=slr_output['crit_val']
-        offset=slr_output['amp_est']
-        seg_lens=slr_output['seg_lens']
-    
 
     #### I think this is wrong - 8/1/2010.
     #### We should be using the offsets for each model rather than resetting
