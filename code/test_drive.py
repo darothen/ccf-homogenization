@@ -246,6 +246,7 @@ hom_params = dict(nstns=params.nstns,
                     inhnet=440, # max number of breaks in a network
                     eps=1e-6, # a very small number
                     stepthres=0.0, # a temperature step limit at which these models might work
+                    qscale=1.46 # scaling factor for clipping outliers
                 )
 hom_params = parameters.Parameters(**hom_params)
 

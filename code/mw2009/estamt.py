@@ -16,6 +16,7 @@ from splitmerge import diff
 from mw2009.chgptmodels import minbic, kthtpr0
 
 import numpy as np
+import operator
 
 def estamt(network, minlenshf=24, **hom_params):
     """
@@ -137,6 +138,7 @@ def estamt(network, minlenshf=24, **hom_params):
     iminlen = hom_params['minlen']
     numclim = 3
     
+    final_results = dict()
     print "  NET   STN    FILT TECH      ------ AFTER ------    ------ BEFORE ------"
     # Process each station and its network of neighbors
     for id in station_list:
@@ -170,15 +172,17 @@ def estamt(network, minlenshf=24, **hom_params):
             print ("%3d %5d %6s Estamt chgin: -- %4d %2d %4d %3d" %
                    (ipass, station_index, id, iy, im, cp, hit_count) )
             
-        ## STATION CHGPT LOOP
+        ## ACCUMULATE PAIRED CHANGEPOINTS AND AMPLITUDE ESTIMATES
         # Loop over "brackets" of changepoints - that is, for changepoints
         # [a, b, c, d], consider the two brackets [a,b,c] and [b,c,d] with 
         # the center value of the changepoints. Note that in the Fortran PHA,
         # we go through these brackets in reverse order - right to left.
         brackets = zip(sorted_cps[-3::-1], sorted_cps[-2::-1], sorted_cps[::-1])
+        final_results[id] = dict()
         for bracket in brackets:
         #for bracket in brackets[:1]:
             (left, cp, right) = bracket[:]
+            
             ly, lm = imo2iym(left)
             cpy, cpm = imo2iym(cp)
             ry, rm = imo2iym(right)
@@ -216,16 +220,23 @@ def estamt(network, minlenshf=24, **hom_params):
                 # bracket we're considering. We are going to be changing them
                 # while we look at this pair
                 (left, cp, right) = bracket[:]
+                
+                ## Figure out which station is the neighbor (not the target
+                ## we're currently considering). At the same time, note that if
+                ## the target is the 2nd changepoint, the adjustments will be
+                ## flipped in sign, so we need to have a correction factor ready
+                correction = 1.0
                 if id == id1:
                     neighb_id = id2
                 else:
                     neighb_id = id1
+                    #correction = -1.0                    
                 
                 # Add this pair to pair_results if it's not already there
                 (ida, idb) = sorted([id1,id2])
                 pair_str = "%s-%s" % (ida, idb)
                 if pair_str not in pair_results:
-                    pair_results[pair_str] = dict()
+                    pair_results[neighb_id] = dict()
                 print pair_str
                 
                 neighb_index = station_list.index(neighb_id)
@@ -317,27 +328,34 @@ def estamt(network, minlenshf=24, **hom_params):
                 ## set/reset trend for each neighbor/segment
                 ##     the first segment is the left-segment,
                 ##     the second segment is the right-segment
+                ##
+                ## Note that we reset left/right potentially to avoid conflicts
+                ## within the paired neighbor data. However, our estimates of
+                ## trends/offsets associated with the "right" adjacent changepoint
+                ## actually refers to that original right changepoint. We'll 
+                ## reset left, cp, and right from the bracket before continuing
+                (left, cp, right) = bracket[:]
                 # Do the left segment first
                 left_dict = dict()
-                left_dict['adj'] = offset
+                left_dict['adj'] = offset*correction
                 left_dict['cor'] = corr
                 left_dict['bic'] = bic
                 left_dict['cmodel'] = cmodel
                 left_dict['trend'] = left_slope
                 left_dict['spanob'] = left_seg_len
-                pair_results[pair_str][cp] = left_dict
+                pair_results[neighb_id][cp] = left_dict
                                 
                 # Do the right segment now
                 right_dict = dict()
-                right_dict['adj'] = offset
+                right_dict['adj'] = offset*correction
                 right_dict['cor'] = corr
                 right_dict['bic'] = bic
                 right_dict['cmodel'] = cmodel
                 right_dict['trend'] = right_slope
                 right_dict['spanob'] = right_seg_len
                 
-                if right not in pair_results[pair_str]:
-                    pair_results[pair_str][right] = right_dict
+                if right not in pair_results[neighb_id]:
+                    pair_results[neighb_id][right] = right_dict
                 else:
                     # We've already recorded this segment before for the last
                     # changepoint. Update the slopes/spanob count (length of
@@ -345,23 +363,172 @@ def estamt(network, minlenshf=24, **hom_params):
                     # length is different.
                     new_trend = slopes[1]
                     new_spanob = right_seg_len
-                    old_trend = pair_results[pair_str][right]['trend']
-                    old_spanob = pair_results[pair_str][right]['spanob']
+                    old_trend = pair_results[neighb_id][right]['trend']
+                    old_spanob = pair_results[neighb_id][right]['spanob']
                     if old_trend != new_trend:
                         print (" Seg2 diff: %s %4d old: %7.2f %4d new: %7.2f %4d" % 
                                (pair_str,right,old_trend,old_spanob,new_trend,new_spanob))
                         # if the new count is greater than the old one, the slope
                         # is probably more robust so update those entries.
                         if new_spanob > old_spanob:
-                            pair_results[pair_str][right]['trend'] = new_trend
-                            pair_results[pair_str][right]['spanob'] = new_spanob
+                            pair_results[neighb_id][right]['trend'] = new_trend
+                            pair_results[neighb_id][right]['spanob'] = new_spanob
                             
                 ## We're done with this pair/changepoint. Summary output -
                 print "itarg,ipair,ichg,numc,iqt,adj,trends: -- -- -- --",cmodel,offset,slopes
             #raw_input("pause")
             
-                    
+            ####################################################################
+            ## ADJUSTMENT DETERMINATION SECTION
+            # Recall the paired-changepoint analyses we just performed, and 
+            # determine if the potential adjustment is statistically valid
+            (left, cp, right) = bracket[:]
+            
+            pair_data = []
+            for neighb_id in pair_results:
+                if not cp in pair_results[neighb_id]:
+                    continue
                 
+                cp_stats = pair_results[neighb_id][cp]
+                adjacent_stats = pair_results[neighb_id][right]
+                
+                trends = (cp_stats['trend'], adjacent_stats['trend'])
+                
+                pair_dict = dict(neighb_id=neighb_id, adj=cp_stats['adj'],
+                                 cor=cp_stats['cor'], trends=trends, used=True)
+                pair_data.append(pair_dict)
+                
+            npairs = len(pair_data)
+            if npairs < numclim:
+                print "Adjpass numc low --",station_index,id,left,cp,right,npairs
+                continue
+            
+            # Process -
+            #    1) Remove both adjustment and trend outliers
+            #    2) Calculate median adjustment
+            #    
+            #    filter around inter-quartile range
+            qscale = hom_params['qscale']
+            pair_data = sorted(pair_data, key=operator.itemgetter('adj'))
+            pair_chgs = [p['adj'] for p in pair_data]
+            chg_25th, chg_median, chg_75th = tukey_med(pair_chgs)
+            
+            chg_iqr = chg_75th-chg_25th
+            chg_low = chg_25th - (chg_median-chg_25th)*1.0*qscale
+            chg_high = chg_75th + (chg_75th-chg_median)*1.0*qscale
+            print (" TRIM p25, p75, pct50, rng, lo, hi: %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f" % 
+                   (chg_25th,chg_75th,chg_median,chg_iqr,chg_low,chg_high) )         
+            # If any of the estimated changepoints are outside the statistically
+            # robust range we just computed, then flag them as we print them and
+            for data in pair_data:
+                neighb_id = data['neighb_id']
+                neighb_index = station_list.index(neighb_id)
+                adj = data['adj']
+                cor = data['cor']
+                trends = data['trends']
+                
+                if not (chg_low < adj < chg_high):
+                    data['used'] = False                
+                flag = 'U' if data['used'] else 'X'
+                print ("%s %4d %7.2f %8.4f %8.4f %7.2f" % 
+                       (flag,neighb_index,adj,trends[0],trends[1],cor) )
+            
+            valid_adj_count = len([d for d in pair_data if d['used']])
+            if valid_adj_count < numclim:
+                print ("Insuff trimmed mean -- %4d %s %5d %5d %5d %5d" % 
+                       (station_index,id,left,cp,right,valid_adj_count) )
+                continue
+            
+            ## BUG: The code here re-computes the inter-quartile range by 
+            ##     scaling qscale by 1.0. Curiously, it doesn't reject any
+            ##     pairs based on this new range.
+            chg_iqr = chg_75th-chg_25th
+            chg_low = chg_25th - (chg_median-chg_25th)*qscale
+            chg_high = chg_75th + (chg_75th-chg_median)*qscale
+            
+            ## Tweak the inter-quartile range to check if the adjustment is 
+            ## Check whether the computed adjustment is significant. That is,
+            ## if 0 is included within the inter-quartile range we computed, then
+            ## we can't reject the null hypothesis that the changepoint is significant
+            if chg_high*chg_low > 0.0:
+                # signs are the same, so 0 isn't included in the range.
+                procstr = "CONSHF"
+                sigadj = chg_median
+            else:
+                procstr = "ZERSHF"
+                sigadj = 0.0
+            
+            final_results[id][cp] = dict(adj=sigadj, std=chg_iqr*1.0*qscale,
+                                         num=npairs)
+
+            print ("%2d %s-%s %s %7.2f" % 
+                   (station_index,id,procstr,chgptstr,sigadj) )
+        
+        ## Print some final output about what changepoints remain for this station
+        final_station_results = final_results[id]
+        final_cps = sorted(final_station_results.keys())
+        for cp in final_cps:
+            adj = final_station_results[cp]['adj']
+            std = final_station_results[cp]['std']
+            
+            cp_stats = station_cp_dict[cp]
+            hit_count = cp_stats['jsum']    
+            iy, im = imo2iym(cp)
+            
+            print ("-- %5d %s Estamt chgout: -- %4d%2d %5d %5d %7.2f %7.2f" % 
+                   (station_index+1,id,iy,im,cp,hit_count,adj,std) )
+        #raw_input("pause")
+        
+    ## Remove the accumulated non-significant changepoints (either non-sig because
+    ## there was too much missing data, the target segment was too short, or the 
+    ## trimmed mean test could not reject the null hypothesis of no change
+    for id in station_list:
+        station_index = station_list.index(id)
+        
+        final_station_results = final_results[id]
+        final_cps = sorted(final_station_results.keys())
+        for cp in final_cps:
+            iy, im = imo2iym(cp)
+            cp_index = final_cps.index(cp)
+            adj = final_station_results[cp]['adj']
+            if adj == 0.0:
+                print ("%s %5d Remove chgpt %5d %4d %2d" % 
+                       (id,station_index,cp_index,iy,im))
+        
+                
+def tukey_med(data):
+    """Computes the 25th, 50th, and 75th percentiles of a set of data, using
+    Tukey's median method. Assume the data is already sorted.
+    
+    """
+    
+    num_data = len(data)
+    
+    # Compute median (50th percentile)
+    median_index = num_data/2
+    if not num_data%2: # if odd...
+        median = data[median_index]
+    else:
+        median = 0.5*(data[median_index-1]+data[median_index])
+    
+    # Compute lower-quarter (25th percentile), inclusive of the median
+    if not median_index%2: 
+        low_quarter = data[median_index/2]
+    else:
+        low_index = median_index-(median_index/2)
+        low_quarter = 0.5*(data[low_index-1]+data[low_index])
+        
+    # Compute upper-quarter (75th percentile), inclusive of the median
+    if not median_index%2:
+        high_quarter = data[median_index+(median_index/2)]
+    else:
+        high_index = median_index+(median_index/2)
+        high_quarter = 0.5*(data[high_index-1]+data[high_index])
+        
+    return low_quarter, median, high_quarter
+    
+    
+    
                 
             
         
