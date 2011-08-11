@@ -1514,11 +1514,14 @@ c             or not (idomain = 0)
             if(intr .eq. 1) then
               idomain = 1
               qsign = tadj
+              print *,intr,tadj
             else
 c             ucpmonthly.v16a
 c             changed "lt" to "le" - does this fix the Interim straight line?
-c             ucpmonthly.v16b changed "le" back to "lt" 
+c     ucpmonthly.v16b changed "le" back to "lt" 
+              print *,intr,qsign,tadj,idomain
               if(qsign * tadj .lt. 0.0) idomain = 0
+              print *,"new ->",idomain
             endif  
             if(tadj .eq. 0.0) then
               izero = izero + 1

@@ -257,7 +257,7 @@ pairs = list(pickle.load(open("fortran_pairs", "r")))
 #         ('307633', '314684'),
 #         ('124837', '324418'),
 #         ('164407', '314055')]
-#pairs = [('111280', '124837'), ]
+#pairs = [('215615', '215887'), ]
 hom_params['pairs'] = pairs
 
 read = True
@@ -320,15 +320,49 @@ for pair in pair_results:
             
         else:
             #if 'TPR' in result['cmodel']:
-            hits[id1_ind, bp] += 1
-            hits[id2_ind, bp] += 1
+            #hits[id1_ind, bp] += 1
+            #hits[id2_ind, bp] += 1
        
             hits_neighbors[id1_ind][bp].append(id2)
             hits_neighbors[id2_ind][bp].append(id1)
             
             hits_models[id1_ind, bp] = result['cmodel']
             hits_models[id2_ind, bp] = result['cmodel']
-            
+
+## Print header - 
+head1 = "             |"+"|".join([i[:3] for i in ids])+"|"
+head2 = "             |"+"|".join([i[3:] for i in ids])+"|"
+print head1
+print head2
+
+## Print monthly series basic
+#con2str = lambda val, miss=-9999: "---" if val != miss else "-x-"
+def con2str(data, missing_val=-9999):
+    val, hits = data
+    
+    if hits > 0:
+        return "%3d" % hits
+    elif val == missing_val:
+        return "-X-"
+    else:
+        return "---"
+     
+for imo in xrange(hom_params.nmo):
+#for imo in xrange(10):
+    year, month = imo2iym(imo)
+    base_str = "%4d %2d %4d |" % (year, month, imo-11)
+    month_strs = "|".join(map(con2str, zip(all_data[:,imo],
+                                           hits[:,imo])))+"|"
+    print_month_strs = False
+    for i in range(10):
+        if str(i) in month_strs: 
+            print_month_strs = True
+            break
+    
+    if print_month_strs:
+        print base_str+month_strs
+sys.exit()
+
 ################################################################################
 ## FILTER 1 TEST
 ## Try to attribute multiple hits between stations at each month to a common
@@ -635,7 +669,91 @@ print ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
 print "FINAL STEP - ENTER ESTAMT"
 print "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
 
+################################################################################
+## COMPUTE FINAL ADJUSTMENTS FOR CHANGEPOINTS
+
 estamt(n, **hom_params)
+
+################################################################################
+## OUTPUT SERIES
+print "----------- Output Adjustments -----------"
+out_dir = "data/WMs.52d"
+
+flags = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+#station_list = ['215887', ]
+for id in station_list:    
+    station_series = n.raw_series[id]
+    #station_data = n.raw_series[id].monthly_series[:]
+    station_data = series_copy[id].monthly_series[:]
+    station_index = station_list.index(id)
+    miss = n.raw_series[id].MISSING_VAL
+
+    station_changepoints = n.raw_series[id].changepoints
+    cps = sorted(station_changepoints.keys())
+    nchg = len(cps)
+    first, last = cps[0], cps[-1]
+    
+    adjusted_data = [miss]*len(station_data)
+    adjtemp = [miss]*len(station_data)
+    contemp = [miss]*len(station_data)
+    outtemp = [miss]*len(station_data)
+    adjflag = [' ']*len(station_data)
+    
+    sumchg = 0.0
+    sumcon = 0.0
+    jadj = 0
+    aflg = ' '
+    
+    segs_to_adjust = zip(cps[-2::-1], cps[::-1])
+    for left, right in segs_to_adjust:
+        jadj += 1
+                
+        cp_index = cps.index(left)
+        print "imo: ",station_index,cp_index,(left+1),right
+        for imo in range(right, left, -1):
+            if station_data[imo] != miss:
+                totchg = sumchg
+                adjtemp[imo] = totchg
+                contemp[imo] = sumcon
+                outtemp[imo] = station_data[imo]*.1 - totchg
+                adjflag[imo] = aflg
+                
+        print ("Adj write: %s %5d %5d %5d %5d %5d %7.2f %7.2f %s" % 
+               (id,nchg,left,right,cp_index,jadj,sumchg,sumcon,aflg) )
+        
+        adj = station_changepoints[left]['ahigh']
+        std = station_changepoints[left]['astd']
+        
+        aflg = flags[jadj]
+        sumchg = totchg+adj
+        sumcon = sqrt(sumcon**2 + std**2)
+        
+    ## call writsta(itarg, nstn(itarg), outtemp, adjtemp, contemp, adjflag, otag, idunit)
+    for i in range(len(outtemp)):
+        o = outtemp[i]
+        if o != miss:
+            outtemp[i] = int(o*10.)
+            
+    yearly_outtemp = []
+    for y in range(hom_params.numyr):
+        yearly_outtemp.append(outtemp[y*12:(y+1)*12] + [miss])
+    station_series.set_series(yearly_outtemp, station_series.years)
+        
+    out_filename = "%s_%s.WMs.52d" % (id, hom_params.variable)
+    output_file = open(os.path.join(out_dir, out_filename), 'w')
+    print " Writing: CoopOutDir:",out_filename
+    output_lines_to_write = []
+    for (year_data, year) in zip(station_series.series, station_series.years):
+        write_data = "".join(["%6d" % val for val in year_data])
+        outstr = "%6s1%4d%s\n" % (id,year,write_data)
+        output_lines_to_write.append(outstr)
+    output_file.writelines(output_lines_to_write)
+    output_file.close()
+            
+        
+        
+        
 
 sys.exit()
 

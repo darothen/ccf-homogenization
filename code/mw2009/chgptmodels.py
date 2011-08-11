@@ -851,13 +851,13 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     # Fifth, compute the first segment intercept, y-median - slope*x-median
     # BUG: Another instance where we do not handle the case of an even number of
     #    values when computing the median
-    #imed = (n_left - 1)/2
-    imed = n_left/2
-    if (n_left%2)==1: imed += 1
-    
-    range_med = range_left[imed-1]
+    imed = n_left/2 - 1
+    if n_left%2: 
+        range_med = range_left[imed+1]
+    else:     
+        range_med = range_left[imed]
     valid_left = sorted(valid_left)
-    data_med = valid_left[imed]
+    data_med = valid_left[imed+1]
     left_y_int = data_med-slope_est*range_med
     print "Seg1 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
                                                                        data_med,
@@ -872,13 +872,13 @@ def kthtpr1(x, y, breakpoint, missing_val, vals):
     # Sixth, compute the second segment intercept
     # BUG: Another instance where we do not handle the case of an even number of
     #    values when computing the median
-    #imed = (n_right - 2)/2
-    imed = n_right/2
-    if (n_right%2)==1: imed += 1
-    
-    range_med = range_right[imed-1]
+    imed = n_right/2 - 1
+    if n_right%2: 
+        range_med = range_right[imed+1]
+    else: 
+        range_med = range_right[imed]
     valid_right = sorted(valid_right)
-    data_med = valid_right[imed]
+    data_med = valid_right[imed+1]
     right_y_int = data_med-slope_est*range_med
     print "Seg2 - Xmed, Ymed, slope, Yint: %7.2f %7.2f %7.2f %7.3f" % (range_med, 
                                                                        data_med,
