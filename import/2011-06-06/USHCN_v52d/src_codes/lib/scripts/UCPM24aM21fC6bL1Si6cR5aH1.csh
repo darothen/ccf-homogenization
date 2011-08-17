@@ -44,7 +44,11 @@ endif
 #  SHAPinp.v6c.for read_write.mthly.v5a.for acovf.for lmbic.for \
 #  lmdiff.f hofn.for $copt -o $binfile
 
-gfortran ucpmonthly.v24a.for splitmerge.v21f.for chgptmodels.v6b.for \
+#gfortran ucpmonthly.v24a.for splitmerge.v21f.for chgptmodels.v6b.for \
+#  SHAPinp.v6c.for read_write.mthly.v5a.for acovf.for lmbic.for \
+#  lmdiff.f hofn.for $copt -o $binfile
+
+gfortran ucpmonthly.v24b.for splitmerge.v21f.for chgptmodels.v6b.for \
   SHAPinp.v6c.for read_write.mthly.v5a.for acovf.for lmbic.for \
   lmdiff.f hofn.for $copt -o $binfile
 

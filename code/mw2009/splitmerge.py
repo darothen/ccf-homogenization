@@ -258,11 +258,8 @@ def splitmerge(network, pairs=None, beg_year=1, end_year=2, **kwargs):
     
     for (id1, id2) in pairs:
         print "Pair %s with %s" % (id1, id2)
-        #continue
         pair_str = "%6s-%6s" % (id1, id2)
-        #if pair_str != "830006-830009":
-        #if pair_str != "215615-215887":
-        #if pair_str != "111280-124837":
+        #if pair_str != "051528-298107":
         #    continue
         
         raw_series = network.raw_series
@@ -386,9 +383,7 @@ def splitmerge(network, pairs=None, beg_year=1, end_year=2, **kwargs):
             ## that in snht(), but we'll do it right now so we can inspect those
             ## standardized values later.
                 z = standardize(segment, MISS)
-                #print segment[:50]
-                #print z[:50]
-                
+
             ## Apply standard normal homogeneity test. 
             ## For mechanics, see Alexandersson and Moberg 1997, Int'l Jrnl of
             ## Climatology (pp 25-34)
@@ -468,9 +463,7 @@ def splitmerge(network, pairs=None, beg_year=1, end_year=2, **kwargs):
             ## means that the breakpoint we previously found in the segment has 
             ## been superseded.
             new_breakpoints = sorted(new_breakpoints)
-            #print new_breakpoints
             seg_bounds = zip(new_breakpoints[:-2], new_breakpoints[2:])
-            #print seg_bounds
             
             remove_breakpoints = set()
             merged_breakpoints = set()
@@ -849,7 +842,32 @@ def splitmerge(network, pairs=None, beg_year=1, end_year=2, **kwargs):
                 print ("Diff domain - Earliest Interim : %s %4d %2d" %
                        (pair_str, yb, mb))                
     
+        ## Remove changepoints which are an SLR model.
+        nspan = [0]*num_months
+        bp_count = 1
+        for bp in sorted(valid_bps.keys()):
+            bp_analysis = valid_bps[bp]
+            
+            if "SLR" in bp_analysis['cmodel']:
+                del valid_bps[bp]
+                continue
+            
+            print "   IN: ",bp
+            nspan[bp] = bp_count
+            ## If adjacent months are missing next to this breakpoint, then
+            ## assume that those could be a breakpoint as well and copy this
+            ## breakpoint's analysis results for them.
+            for month in range(bp+1, last):
+                if (month in ndelete) or (diff_data[month] == MISS):
+                    nspan[month] = bp_count
+                    print "   IN: ",month
+                    valid_bps[month] = bp_analysis
+                else:
+                    break
+            bp_count += 1
+            
         valid_bps['del'] = ndelete
+        valid_bps['nspan'] = nspan
         pair_results[pair_str] = valid_bps
         
         #print "ELAPSED TIMES = %3.2e %3.2e" % (elapsed1, elapsed2)

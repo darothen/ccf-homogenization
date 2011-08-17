@@ -169,6 +169,10 @@ def estamt(network, minlenshf=24, **hom_params):
             
             station_cp_dict = network.raw_series[id].changepoints 
             sorted_cps = sorted(station_cp_dict.keys())
+            ## If there are no breakpoints...
+            if not sorted_cps:
+                final_results[id] = dict()
+                continue
                 
             station_series = network.raw_series[id]
             missing_val = station_series.MISSING_VAL
