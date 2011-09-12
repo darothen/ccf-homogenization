@@ -32,7 +32,7 @@ USHCN_STATION_LIST = "ushcn-stations.txt"
 
 #: A pattern to use for matching and downloading data from the USHCN_FTP_ROOT
 #: site.
-USHCN_RAW_DATA_PATTERN = "9641C_200912_%s.%s"
+USHCN_RAW_DATA_PATTERN = "9641C_201012_%s.%s"
 
 #: The element codes identifying what variable is contained in a USHCN dataset,
 #: and the scaling factor to convert the recorded values to observations.
@@ -127,7 +127,7 @@ def get_ushcn_data(params):
 
         if fname.endswith(".gz"):
             uncompressed_file = gzip.open(fname, 'rb')
-            f_out = open(data_path(fname[:-3]), 'wb') 
+            f_out = open(data_path(fname[:-3]), 'wb')
             f_out.writelines(uncompressed_file.read())
             f_out.close()
     
@@ -311,6 +311,34 @@ def read_station_string(station_str):
                           coop_2=coop_2, coop_3=coop_3,
                           utc_offset=utc_offset)
     return new_station
+
+def write_network(network, homogenized=True, **hom_params):
+    """Write the series data in a network object to disk, either before or after
+    it has been homogenized. If the data has already passed through a 
+    homogenization process, 
+    
+    """    
+    out_dir = os.path.join(hom_params['output_dir'], "WMs.52d")
+
+    station_list = network.stations.keys()
+    
+    for id in station_list:
+        
+        if homogenized:
+            station_series = network.homog_series[id]
+        else:
+            station_series = network.raw_series[id]    
+    
+        out_filename = "%s_%s.WMs.52d" % (id, station_series.variable_str)
+        output_file = open(os.path.join(out_dir, out_filename), 'w')
+        print " Writing: CoopOutDir:",out_filename
+        output_lines_to_write = []
+        for (year_data, year) in zip(station_series.series, station_series.years):
+            write_data = "".join(["%6d" % val for val in year_data])
+            outstr = "%6s1%4d%s\n" % (id,year,write_data)
+            output_lines_to_write.append(outstr)
+        output_file.writelines(output_lines_to_write)
+        output_file.close()    
 
 def format_station_string(station):
     """Write a string containing a station's metadata, as formatted by USHCN.
