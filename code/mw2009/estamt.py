@@ -8,15 +8,112 @@
 """
 __docformat__ = "restructuredtext"
 
-from util import imo2iym, get_valid_data, compute_monthly_anomalies
-from util import compute_first_diff, compute_corr
-from splitmerge import diff
-
-from mw2009.chgptmodels import minbic, kthtpr0
-
 import numpy as np
 import operator
+import math
 
+from util import imo2iym, get_valid_data
+from util import compute_first_diff, compute_corr
+from ushcn_data import Series
+from mw2009.splitmerge import diff
+from mw2009.chgptmodels import minbic, kthtpr0
+
+
+def apply_adjustments(network, **hom_params):
+    """Given a network which contains raw series data and a record of filtered
+    changepoints and their amplitudes, accumulates those changes to produce
+    a homogenized network.
+    
+    :Param network:
+        The network in which to apply adjustments. This network object needs
+        to have the fields:
+        :Ivar raw_series:
+            A dictionary where each key is a station coop id as a string which
+            points to a Series object containing the original raw data.
+            :Ivar changepoints:
+                A dictionary where each key is a monthly index as a string which
+                points to a dictionary object containing the changepoint
+                amplitude and error for that monthly index.
+    :Param hom_params:
+        The parameters object and fields which contain information about 
+        this analysis.
+    :Return:
+        Modifies network to contain a new instance variable, homog_series, which
+        is a dictionary of Series instances just like network.raw_series, but
+        which has had its data adjusted according to the changepoints provided
+        here.
+    
+    """
+    print "----------- Output Adjustments -----------"
+    
+    flags = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    station_list = network.stations.keys()
+    network.homog_series = dict()
+    
+    for id in station_list:    
+        station_series = network.raw_series[id]
+        station_data = network.raw_series[id].monthly_series[:]
+        station_index = station_list.index(id)
+        miss = network.raw_series[id].MISSING_VAL
+        
+
+        homog_series = Series(id=id, variable_str=station_series.variable,
+                              MISSING_VAL=station_series.MISSING_VAL)
+        
+        num_years = len(station_series.years)
+    
+        station_changepoints = network.raw_series[id].changepoints
+        cps = sorted(station_changepoints.keys())
+        nchg = len(cps)
+        first, last = cps[0], cps[-1]
+        
+        adjusted_data = [miss]*len(station_data)
+        adjtemp = [miss]*len(station_data)
+        contemp = [miss]*len(station_data)
+        outtemp = [miss]*len(station_data)
+        adjflag = [' ']*len(station_data)
+        
+        sumchg = 0.0
+        sumcon = 0.0
+        jadj = 0
+        aflg = ' '
+        
+        segs_to_adjust = zip(cps[-2::-1], cps[::-1])
+        for left, right in segs_to_adjust:
+            jadj += 1
+                    
+            cp_index = cps.index(left)
+            print "imo: ",station_index,cp_index,(left+1),right
+            for imo in range(right, left, -1):
+                if station_data[imo] != miss:
+                    totchg = sumchg
+                    adjtemp[imo] = totchg
+                    contemp[imo] = sumcon
+                    outtemp[imo] = station_data[imo]*.1 - totchg
+                    adjflag[imo] = aflg
+                    
+            print ("Adj write: %s %5d %5d %5d %5d %5d %7.2f %7.2f %s" % 
+                   (id,nchg,left,right,cp_index,jadj,sumchg,sumcon,aflg) )
+            
+            adj = station_changepoints[left]['ahigh']
+            std = station_changepoints[left]['astd']
+            
+            aflg = flags[jadj]
+            sumchg = totchg+adj
+            sumcon = math.sqrt(sumcon**2 + std**2)
+            
+        for i in range(len(outtemp)):
+            o = outtemp[i]
+            if o != miss:
+                outtemp[i] = int(o*10.)
+                
+        yearly_outtemp = []
+        for y in range(num_years):
+            yearly_outtemp.append(outtemp[y*12:(y+1)*12] + [miss])
+            
+        homog_series.set_series(yearly_outtemp, station_series.years)
+        network.homog_series[id] = homog_series
+        
 def estamt(network, minlenshf=24, **hom_params):
     """
     COPIED FROM ucpmonthly.v24a.f:
