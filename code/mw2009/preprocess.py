@@ -2,9 +2,165 @@
 #
 # Daniel Rothenberg, 2011-06-28
 
-from util import compute_arc_dist, compute_first_diff, compute_corr, compute_std
+"""Pre-processing stage for MW2009 homogenization. Contains methods for
+computing neighborhoods of stations and correlations between pairs of 
+stations.
 
+"""
+__docformat__ = "restructuredtext"
+
+import os
 from operator import itemgetter
+
+from util import compute_arc_dist, compute_first_diff, compute_corr, compute_std
+from util import compute_monthly_anomalies
+
+def preprocess(network, **params):
+    """Performs the pre-processing necessary to run the pairwise homogenization
+    algorithm on a network of USHCN coop station data. This involves computing
+    neighborhoods of stations which are close to each other, as well as 
+    finding stations within these neighborhoods that are highly correlate.
+    
+    :Param network:
+        The network to pre-process, which by this point should have the instance
+        variables
+        :Ivar stations:
+            A dictionary mapping of station coop ids as strings to the Station
+            object holding metadata for that station.
+        :Ivar raw_series:
+            A dictionary mapping of station coop ids as strings to the Series
+            object containing the data read in for that station.
+    :Return:
+        Modifies network by adding the instance variables
+        :Ivar neighborhoods:
+            A dictionary mapping of station coop ids as strings to a list of
+            other station coop id strings which are considered the "neighbors"
+            of the key station.
+        :Ivar correlations:
+            A dictionary mapping of station coop ids as strings to a dictionary
+            which maps the highest correlated neighbors of this key station to
+            their correlation coefficient. For instance, if station "111111" 
+            correlates to "222222" with r = 0.45 and to "333333" with r = 0.98,
+            then
+                network.correlations['111111'] == dict("222222":0.45,
+                                                       "333333":0.98 )
+    
+    """
+    
+    print "Analyzing geographic network neighborhoods"
+
+    all_neighbors = dict()
+    stations_list = network.stations.values()
+    for station in stations_list:
+        
+        print station.coop_id
+        print "...computing neighbor distances"
+        
+        neighbors = find_neighborhood(station, stations_list, **params)
+        all_neighbors[station.coop_id] = neighbors
+        
+    network.neighborhoods = all_neighbors
+     
+    # Write a neighborhood output file. Since my algorithm for computing distance
+    # is slightly different than ushcn_dist_2004.v3, it won't produce exactly the
+    # same distance output file. However, all the distances are within 10km, which
+    # is perfectly fine. A bigger problem is that the ushcn_dist_2004.v3 outputs a
+    # list of pointers for referencing the various stations. Since my code doesn't
+    # emulate the Fortran code in terms of having arrays with lengths hard-coded,
+    # I don't pass around pointers in the same way, so the ptr_str produced and
+    # written here is garbage. It should not be a problem for coding MW2009, though,
+    # because I can find information about stations dynamically and easily.
+    print "...Assembling neighborhood output file"
+    
+    dist_out = open(params['dist_file'], 'wb')
+    
+    for station in stations_list:
+        print "   ", station
+        neighbors = all_neighbors[station.coop_id]
+        
+        out_strings = neighborhood_strings(station, neighbors, stations_list)
+        dist_out.writelines(out_strings)
+    
+    dist_out.close()
+        
+    ##########################################################################
+    
+    # Go through all the data we have, and replace the read-in values with
+    # monthly anomalies. Then, flatten the data into a list with all the data
+    # and length (endyr-begyr)*12
+    for s in network.raw_series.itervalues():
+        data = s.series
+        anomalies = compute_monthly_anomalies(data, -9999)
+        s.set_series(anomalies, s.years)
+    
+    print "Determining correlated neighbors"
+    
+    if os.path.exists(params['corr_file']):
+        print "...great, I'm gonna read it from disk...",
+        
+        corr_file = open(params['corr_file'])
+        
+        all_lines = corr_file.readlines()
+        station_lines = all_lines[::2]
+        corr_lines = all_lines[1::2]
+        
+        all_corrs = dict()
+        for (sta_line, corr_line) in zip(station_lines, corr_lines):
+            stations = sta_line.strip().split()
+            this, others = stations[0], stations[1:]
+            corrs = map(float, corr_line.strip().split()[1:])
+            
+            corr_dict = dict()
+            for (id, corr) in zip(others, corrs):
+                if not id == '000000':
+                    corr_dict[id] = corr
+            
+            all_corrs[this] = corr_dict
+            
+        print " that was fast!"
+        
+    else:
+        
+        print "...need to do all the compuations"
+    
+        all_corrs = dict()
+        
+        for cand_series in network.raw_series.itervalues():
+            
+            coop_id1 = cand_series.coop_id
+            corr_dict = find_correlations(cand_series, network.raw_series,
+                                          network.neighborhoods[coop_id1], **params)
+            
+            all_corrs[coop_id1] = dict(corr=corr_dict)
+        
+        # Write a correlation output file. The actual correlations between stations
+        # matches *perfectly* those computed with the ushcn_corr_2004.v3 code. However,
+        # there are still issues with Fortran array pointers since I don't use any here
+        # and I don't bother to pad the output file with bogus stations and correlations
+        # if there are less than we hoped to find.
+        print "...Assembling neighborhood correlation file\n"
+        corr_out = open(params['corr_file'], 'wb')
+        station_list = network.stations.keys()
+        for sta_id in station_list:
+            correlations = all_corrs[sta_id]['corr']
+            sorted_neighbors = sorted(correlations.iteritems(),
+                                      key=itemgetter(1), reverse=True)[:params['numcorr']-1]
+            # PAD PAD PAD
+            ## Just pad the output with '000000' stations, r = 0.0 to make it look
+            ## like the normal output.
+            while len(sorted_neighbors) < params['numcorr']-1:
+                sorted_neighbors.append(('000000', 0.0))
+            ids, corrs = zip(*sorted_neighbors)
+            id_str = ("%6s " % sta_id)+"".join(("%6s " % id for id in ids))+"\n"
+            #ptr_str = ("{0: >6d} ".format(test_stations.index(sta_id)+1))+"".join(("{0: >6d} ".format(test_stations.index(id)+1) for id in ids))+"\n"
+            corr_str = ("  1.00 ")+"".join(("{0: >6.2f} ".format(c) for c in corrs))+"\n"
+            
+            #corr_out.writelines((id_str, ptr_str, corr_str))
+            corr_out.writelines((id_str, corr_str))
+            
+        corr_out.close()    
+        
+    network.correlations = all_corrs
 
 def find_neighborhood(station, stations_list, numsrt=40, mindist=200.0, **kwargs):
     """
